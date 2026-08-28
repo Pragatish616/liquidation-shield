@@ -1,5 +1,7 @@
 # Liquidation Shield — Dashboard
 
+**Live:** [liquidation-shield.vercel.app](https://liquidation-shield.vercel.app)
+
 Next.js 14 App Router control center for the Liquidation Shield keeper: a live health-factor gauge, the ranked intervention plan, and the full assess → plan → execute/refuse audit trail.
 
 ## Stack
@@ -28,3 +30,5 @@ The `/api/decisions` route proxies to `${BACKEND_URL}/api/decisions` server-side
 ## Deploying
 
 Import this repo on Vercel with **Root Directory set to `dashboard`**, and set `BACKEND_URL` as an environment variable on the Vercel project once the backend is deployed.
+
+Deployed at [liquidation-shield.vercel.app](https://liquidation-shield.vercel.app).

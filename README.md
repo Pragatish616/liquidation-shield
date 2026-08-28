@@ -9,6 +9,7 @@
 [![viem](https://img.shields.io/badge/viem-2.x-1c1c1c)](https://viem.sh/)
 [![Tests](https://img.shields.io/badge/tests-147%20passing-brightgreen)](#testing--verification)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Live Dashboard](https://img.shields.io/badge/Live%20Dashboard-liquidation--shield.vercel.app-black?logo=vercel)](https://liquidation-shield.vercel.app)
 
 Built for **CSI ORIGIN 2026 — Problem Statement 11**.
 
