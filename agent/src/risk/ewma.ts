@@ -80,14 +80,26 @@ function medianSampleIntervalSec(points: PricePoint[]): number {
  * rate from two aligned (same length, same timestamps) price histories.
  * lambda defaults to 0.97 per plan.md §4.1's 1-minute-grid recommendation;
  * pass a different lambda if your series is sampled on a different grid.
+ *
+ * minPoints guards against an unreliable estimate from a short series:
+ * ewmaVariance seeds its very first value from a single squared return, so
+ * with too few points that seed dominates the whole recursion instead of
+ * being smoothed out. Defaults to 30; pass a lower value only for tests or
+ * when you have deliberately accepted the extra noise.
  */
 export function computeSigmaPerSec(
   collateral: PricePoint[],
   debt: PricePoint[],
   lambda = 0.97,
+  minPoints = 30,
 ): SigmaPerSec {
   if (collateral.length < 3) {
     throw new Error('need at least 3 price points to estimate volatility');
+  }
+  if (collateral.length < minPoints) {
+    throw new Error(
+      `insufficient price history for a reliable EWMA estimate: got ${collateral.length} points, need at least ${minPoints}`,
+    );
   }
   const ratios = ratioSeries(collateral, debt);
   const returns = logReturns(ratios);

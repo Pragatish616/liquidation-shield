@@ -53,6 +53,11 @@ describe('sigmaPerSecond', () => {
 });
 
 describe('computeSigmaPerSec', () => {
+  // These fixtures deliberately use short (5-point) series to keep the math
+  // hand-traceable, so they pass an explicit low minPoints override to opt
+  // out of the default reliability guard (see the dedicated minPoints
+  // describe block below for that guard's own tests).
+
   it('computes a positive per-second sigma from aligned collateral/debt series', () => {
     const t0 = 1_700_000_000;
     const step = 3600; // hourly samples
@@ -62,7 +67,7 @@ describe('computeSigmaPerSec', () => {
     }));
     const debt: PricePoint[] = [1, 1, 1, 1, 1].map((price, i) => ({ t: t0 + i * step, price }));
 
-    const sigmaPerSec = computeSigmaPerSec(collateral, debt, 0.9);
+    const sigmaPerSec = computeSigmaPerSec(collateral, debt, 0.9, 3);
     expect(sigmaPerSec).toBeGreaterThan(0);
     // sanity: per-second sigma must be tiny relative to the per-hour sigma
     // it was derived from (scales down by sqrt(3600) = 60).
@@ -73,7 +78,7 @@ describe('computeSigmaPerSec', () => {
     const t0 = 0;
     const collateral: PricePoint[] = [1, 2, 3].map((price, i) => ({ t: t0 + i, price }));
     const debt: PricePoint[] = [1, 2].map((price, i) => ({ t: t0 + i, price }));
-    expect(() => computeSigmaPerSec(collateral, debt)).toThrow();
+    expect(() => computeSigmaPerSec(collateral, debt, 0.97, 3)).toThrow(/length mismatch/);
   });
 
   it('throws a clear error on same-length but misaligned timestamps', () => {
@@ -89,8 +94,8 @@ describe('computeSigmaPerSec', () => {
       price,
     }));
 
-    expect(() => computeSigmaPerSec(collateral, debt)).toThrow(/index 2/);
-    expect(() => computeSigmaPerSec(collateral, debt)).toThrow(
+    expect(() => computeSigmaPerSec(collateral, debt, 0.97, 3)).toThrow(/index 2/);
+    expect(() => computeSigmaPerSec(collateral, debt, 0.97, 3)).toThrow(
       new RegExp(`collateral.t=${t0 + 2 * step}.*debt.t=${t0 + 2 * step + 1}`),
     );
   });
@@ -104,6 +109,46 @@ describe('computeSigmaPerSec', () => {
     }));
     const debt: PricePoint[] = [1, 1, 1, 1, 1].map((price, i) => ({ t: t0 + i * step, price }));
 
-    expect(() => computeSigmaPerSec(collateral, debt, 0.9)).not.toThrow();
+    expect(() => computeSigmaPerSec(collateral, debt, 0.9, 3)).not.toThrow();
+  });
+
+  describe('minPoints reliability guard', () => {
+    function series(n: number, t0 = 1_700_000_000, step = 3600): PricePoint[] {
+      return Array.from({ length: n }, (_, i) => ({
+        t: t0 + i * step,
+        price: 3000 + (i % 7) * 10, // small deterministic wiggle, never zero/negative
+      }));
+    }
+    function flat(n: number, t0 = 1_700_000_000, step = 3600): PricePoint[] {
+      return Array.from({ length: n }, (_, i) => ({ t: t0 + i * step, price: 1 }));
+    }
+
+    it('throws by default on a series shorter than 30 points, naming actual vs required', () => {
+      const collateral = series(10);
+      const debt = flat(10);
+      expect(() => computeSigmaPerSec(collateral, debt)).toThrow(
+        /insufficient price history.*got 10 points, need at least 30/,
+      );
+    });
+
+    it('succeeds by default on a series with >= 30 points', () => {
+      const collateral = series(30);
+      const debt = flat(30);
+      expect(() => computeSigmaPerSec(collateral, debt)).not.toThrow();
+    });
+
+    it('honors an explicit lower minPoints override', () => {
+      const collateral = series(10);
+      const debt = flat(10);
+      expect(() => computeSigmaPerSec(collateral, debt, 0.97, 5)).not.toThrow();
+    });
+
+    it('still enforces a higher explicit minPoints override', () => {
+      const collateral = series(10);
+      const debt = flat(10);
+      expect(() => computeSigmaPerSec(collateral, debt, 0.97, 50)).toThrow(
+        /got 10 points, need at least 50/,
+      );
+    });
   });
 });
