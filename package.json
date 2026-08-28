@@ -1,0 +1,38 @@
+{
+  "name": "liquidation-shield",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "fork": "bash scripts/fork.sh",
+    "seed": "tsx scripts/seedPosition.ts",
+    "crash": "tsx scripts/crashPrice.ts",
+    "assess": "tsx agent/src/risk/assess.ts",
+    "test": "vitest run"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "11.24.0",
+      "onFail": "download"
+    }
+  },
+  "packageManager": "pnpm@11.24.0",
+  "type": "module",
+  "dependencies": {
+    "@bgd-labs/aave-address-book": "^4.44.22",
+    "dotenv": "^17.4.2",
+    "jstat": "^1.9.6",
+    "viem": "^2.56.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}
