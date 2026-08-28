@@ -1,0 +1,13 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+
+[rpc_endpoints]
+mainnet = "${MAINNET_RPC}"
+
+# aave-v3-origin / v3-periphery / openzeppelin installs are deferred to
+# Part 2/3's scope -- Part 1 only needs MockAggregator.sol, which has no
+# external imports.
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
