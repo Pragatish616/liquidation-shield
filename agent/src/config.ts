@@ -8,7 +8,13 @@ const envSchema = z.object({
   // reads and pin their own block per call via getBlockNumber() -- see
   // READ_RPC_URL below -- so a read-only mainnet deploy doesn't need this.
   FORK_BLOCK: z.coerce.number().optional(),
-  MAINNET_RPC: z.string().min(1),
+  // Optional: required by scripts/ and by READ_RPC_URL when
+  // READ_MODE=mainnet, but NOT by the keeper backend's module graph in
+  // general -- server.ts imports this file even in pure mock mode (no
+  // WATCH_ADDRESS), and requiring a mainnet RPC just to boot in mock mode
+  // is exactly the kind of unnecessary infra dependency plan.md's mock
+  // path is meant to avoid. See READ_RPC_URL's fallback below.
+  MAINNET_RPC: z.string().min(1).optional(),
   // Optional: 'mainnet' to make READ_RPC_URL default to MAINNET_RPC instead
   // of the local fork when READ_RPC_URL itself isn't set. See render.yaml.
   READ_MODE: z.string().optional(),
@@ -40,7 +46,7 @@ export const MAINNET_RPC = env.MAINNET_RPC;
  * available, e.g. on Render) works without touching scripts/'s fork-based
  * flows, which still default to LOCAL_RPC_URL untouched.
  */
-export const READ_RPC_URL =
-  env.READ_RPC_URL ?? (env.READ_MODE === 'mainnet' ? env.MAINNET_RPC : LOCAL_RPC_URL);
+export const READ_RPC_URL: string =
+  env.READ_RPC_URL ?? (env.READ_MODE === 'mainnet' && env.MAINNET_RPC ? env.MAINNET_RPC : LOCAL_RPC_URL);
 export const REACTION_WINDOW_SEC = env.REACTION_WINDOW_SEC;
 export const RISK_Z = env.RISK_Z;

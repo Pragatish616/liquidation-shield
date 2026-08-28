@@ -5,7 +5,7 @@ import { tickOnce, type KeeperOptions } from './keeper/loop.ts';
 import { healthFactor } from './health.ts';
 import { makeMultiCollateral } from './mock/position.ts';
 import { crashWETH, recoverCollateral } from './mock/crash.ts';
-import { READ_RPC_URL, MAINNET_RPC } from '../../config.ts';
+import { READ_RPC_URL } from '../../config.ts';
 
 const PORT = Number(process.env.PORT ?? 8080);
 const TICK_INTERVAL_MS = Number(process.env.TICK_INTERVAL_MS ?? 15000);
@@ -92,13 +92,15 @@ function deriveStatus(records: DecisionRecord[]) {
 // reads and pin their own block per call.
 async function startRealMode(): Promise<(() => Promise<void>) | null> {
   const watchAddress = process.env.WATCH_ADDRESS;
-  const rpcUrl = READ_RPC_URL || MAINNET_RPC;
-  if (!watchAddress || !rpcUrl) {
+  // READ_RPC_URL always resolves to a non-empty string (falls back to the
+  // local fork by default -- see config.ts), so this is really just the
+  // watchAddress check; kept explicit for clarity at the call site.
+  if (!watchAddress || !READ_RPC_URL) {
     return null;
   }
 
   try {
-    const probe = await fetch(rpcUrl, {
+    const probe = await fetch(READ_RPC_URL, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] }),
