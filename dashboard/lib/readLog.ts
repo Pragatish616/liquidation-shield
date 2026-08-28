@@ -16,6 +16,39 @@ export interface DecisionRecord {
   reason?: string;
 }
 
+export interface DecisionsPayload {
+  scenario: string;
+  records: DecisionRecord[];
+  live: boolean;
+}
+
+// If BACKEND_URL is set (a deployed `pnpm server` instance -- see
+// agent/src/keeper-backend/src/server.ts), proxy to it server-side so the
+// browser never needs CORS and the fetch stays same-origin from the client's
+// point of view. Falls back to reading the local JSON-lines log produced by
+// `pnpm demo:*`, which is how this route behaves for local/dev use.
+export async function fetchLiveDecisions(scenario: 'real' | 'save' | 'refuse'): Promise<DecisionsPayload> {
+  const backendUrl = process.env.BACKEND_URL;
+  if (backendUrl) {
+    try {
+      const res = await fetch(`${backendUrl.replace(/\/$/, '')}/api/decisions`, {
+        cache: 'no-store',
+        signal: AbortSignal.timeout(5000),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as DecisionsPayload;
+        return { scenario: data.scenario ?? scenario, records: data.records ?? [], live: data.live ?? false };
+      }
+    } catch {
+      // backend unreachable -- fall through to local file mode
+    }
+  }
+
+  const path = getLogPath(scenario);
+  const records = readDecisions(path);
+  return { scenario, records, live: records.length > 0 };
+}
+
 export function getLogPath(scenario: 'real' | 'save' | 'refuse' = 'real'): string {
   if (process.env.DECISION_LOG_PATH && existsSync(process.env.DECISION_LOG_PATH)) {
     return process.env.DECISION_LOG_PATH;

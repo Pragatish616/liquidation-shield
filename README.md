@@ -91,6 +91,8 @@ pnpm plan                          # Decide: ranked intervention candidates
 pnpm crash --asset WETH --pct -12  # simulate a price crash
 pnpm demo:real                     # Sense → Decide → Act, end-to-end, on real data
 
+pnpm server                        # Operate: keeper HTTP server at localhost:8080
+
 cd dashboard && pnpm install && pnpm dev   # visualize it at localhost:3000
 ```
 
@@ -133,7 +135,12 @@ cd contracts && forge build && forge test
 
 **Off-chain agent** — TypeScript, vitest, zod-validated config.
 
-**Dashboard** — Next.js 14 (App Router), Tailwind CSS, reads the live decision log produced by the real agent.
+**Dashboard** — Next.js 14 (App Router), Tailwind CSS, Geist Sans/Mono, Phosphor Icons, Motion — reads the live decision log produced by the real agent, either from a local file or a deployed backend.
+
+## Deploying
+
+- **Dashboard → Vercel**: import this repo, set the project's **Root Directory to `dashboard`**. Optionally set `BACKEND_URL` to point it at a deployed backend.
+- **Keeper backend → Render** (or any Node host): `pnpm server` starts an HTTP server (`agent/src/keeper-backend/src/server.ts`) that runs the same assess → plan → execute/refuse pipeline on a timer and exposes it at `GET /api/decisions`. A `render.yaml` blueprint is included at the repo root. Real on-chain mode activates automatically when `WATCH_ADDRESS`, `MAINNET_RPC`, and `FORK_BLOCK` are set and an Anvil fork is reachable; otherwise it runs a continuously-ticking simulated market so the deployed backend is always genuinely live.
 
 ## Non-custodial by design
 

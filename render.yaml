@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: liquidation-shield-backend
+    runtime: node
+    plan: free
+    buildCommand: corepack enable && pnpm install
+    startCommand: pnpm server
+    envVars:
+      - key: TICK_INTERVAL_MS
+        value: "15000"
+      - key: ALLOWED_ORIGIN
+        value: "*"

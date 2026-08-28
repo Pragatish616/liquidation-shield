@@ -13,7 +13,8 @@
     "test:keeper": "node --test --experimental-strip-types agent/src/keeper-backend/tests/*.test.ts",
     "demo:save": "node --experimental-strip-types scripts/scenarios/01-save.ts",
     "demo:refuse": "node --experimental-strip-types scripts/scenarios/02-refuse.ts",
-    "demo:real": "tsx scripts/scenarios/03-real.ts"
+    "demo:real": "tsx scripts/scenarios/03-real.ts",
+    "server": "tsx agent/src/keeper-backend/src/server.ts"
   },
   "keywords": ["aave", "defi", "liquidation", "flash-loan", "ethereum"],
   "author": "",

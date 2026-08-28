@@ -1,22 +1,17 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { GeistSans } from 'geist/font/sans';
+import { GeistMono } from 'geist/font/mono';
 import './globals.css';
-
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
 export const metadata: Metadata = {
   title: 'Liquidation Shield — Control Center',
-  description: 'CSI ORIGIN 2026 Problem Statement 11 — Deleveraging Control System',
+  description: 'Closed-loop deleveraging control for leveraged Aave v3 positions.',
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`dark ${inter.variable}`}>
-      <body className="min-h-screen antialiased font-sans">{children}</body>
+    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
+      <body className="min-h-[100dvh] font-sans antialiased">{children}</body>
     </html>
   );
 }
