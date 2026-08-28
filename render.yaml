@@ -3,10 +3,22 @@ services:
     name: liquidation-shield-backend
     runtime: node
     plan: free
-    buildCommand: npx pnpm@11.24.0 install
+    buildCommand: npx pnpm@11.24.0 install --prod=false
     startCommand: npx pnpm@11.24.0 server
+    healthCheckPath: /health
     envVars:
       - key: TICK_INTERVAL_MS
         value: "15000"
       - key: ALLOWED_ORIGIN
         value: "*"
+      # Set in the Render dashboard, not committed here.
+      - key: MAINNET_RPC
+        sync: false
+      # The Aave borrower this deployment watches. Set in the Render
+      # dashboard, or leave unset to run in mock mode.
+      - key: WATCH_ADDRESS
+        sync: false
+      # No fork available on Render -- read-only mainnet mode instead.
+      # See agent/src/config.ts's READ_RPC_URL resolution.
+      - key: READ_MODE
+        value: mainnet

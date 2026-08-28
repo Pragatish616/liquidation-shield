@@ -3,8 +3,17 @@ import { z } from 'zod';
 
 const envSchema = z.object({
   ANVIL_PORT: z.coerce.number().default(8545),
-  FORK_BLOCK: z.coerce.number(),
+  // Optional: only the fork-based scripts (seed/crash/execute, see
+  // scripts/fork.sh) need a pinned block. readPosition/assess are pure
+  // reads and pin their own block per call via getBlockNumber() -- see
+  // READ_RPC_URL below -- so a read-only mainnet deploy doesn't need this.
+  FORK_BLOCK: z.coerce.number().optional(),
   MAINNET_RPC: z.string().min(1),
+  // Optional: 'mainnet' to make READ_RPC_URL default to MAINNET_RPC instead
+  // of the local fork when READ_RPC_URL itself isn't set. See render.yaml.
+  READ_MODE: z.string().optional(),
+  // Optional: explicit override for READ_RPC_URL's resolution below.
+  READ_RPC_URL: z.string().optional(),
   // Optional risk-policy overrides -- unset means "use RiskPolicy's own
   // default", not zero. See agent/src/risk/buffer.ts's DEFAULT_POLICY and
   // plan.md §7 acceptance criterion 4 (doubling reactionWindowSec must
@@ -15,9 +24,23 @@ const envSchema = z.object({
 
 const env = envSchema.parse(process.env);
 
-/** The reader/scripts always talk to the local fork, never MAINNET_RPC directly. */
+/**
+ * The fork-based scripts (seed/crash/execute, and anything that needs to
+ * mutate state or replay a pinned scenario) always talk to the local Anvil
+ * fork via this -- never MAINNET_RPC directly. Unchanged by READ_RPC_URL
+ * below; keep using this one in scripts/.
+ */
 export const LOCAL_RPC_URL = `http://127.0.0.1:${env.ANVIL_PORT}`;
-export const FORK_BLOCK = BigInt(env.FORK_BLOCK);
+export const FORK_BLOCK = env.FORK_BLOCK !== undefined ? BigInt(env.FORK_BLOCK) : undefined;
 export const MAINNET_RPC = env.MAINNET_RPC;
+/**
+ * What the READ-ONLY path (reader/, assess()) talks to. Resolves, in order:
+ * an explicit READ_RPC_URL, else MAINNET_RPC when READ_MODE=mainnet, else
+ * the local fork -- so a deployed read-only mainnet keeper (no fork
+ * available, e.g. on Render) works without touching scripts/'s fork-based
+ * flows, which still default to LOCAL_RPC_URL untouched.
+ */
+export const READ_RPC_URL =
+  env.READ_RPC_URL ?? (env.READ_MODE === 'mainnet' ? env.MAINNET_RPC : LOCAL_RPC_URL);
 export const REACTION_WINDOW_SEC = env.REACTION_WINDOW_SEC;
 export const RISK_Z = env.RISK_Z;

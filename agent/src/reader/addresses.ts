@@ -11,7 +11,7 @@ import { createPublicClient, http, type Address, type PublicClient } from 'viem'
 import { mainnet } from 'viem/chains';
 import { AaveV3Ethereum } from '@bgd-labs/aave-address-book';
 import { pathToFileURL } from 'node:url';
-import { LOCAL_RPC_URL } from '../config';
+import { READ_RPC_URL } from '../config';
 import { poolAddressesProviderAbi } from './abis';
 
 /** The one address that never changes — verified against OVERVIEW.md §5 and the address book. */
@@ -25,7 +25,7 @@ export type AaveAddresses = {
   aclAdmin: Address;
 };
 
-export function makePublicClient(rpcUrl: string = LOCAL_RPC_URL): PublicClient {
+export function makePublicClient(rpcUrl: string = READ_RPC_URL): PublicClient {
   return createPublicClient({ chain: mainnet, transport: http(rpcUrl) });
 }
 

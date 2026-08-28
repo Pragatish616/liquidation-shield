@@ -5,6 +5,7 @@ import { tickOnce, type KeeperOptions } from './keeper/loop.ts';
 import { healthFactor } from './health.ts';
 import { makeMultiCollateral } from './mock/position.ts';
 import { crashWETH, recoverCollateral } from './mock/crash.ts';
+import { READ_RPC_URL, MAINNET_RPC } from '../../config.ts';
 
 const PORT = Number(process.env.PORT ?? 8080);
 const TICK_INTERVAL_MS = Number(process.env.TICK_INTERVAL_MS ?? 15000);
@@ -14,25 +15,31 @@ const USER_ID = 'live-keeper';
 
 let mode: 'mock' | 'real' = 'mock';
 let ticksRun = 0;
+let lastTickAt: number | null = null;
+let lastTickOk: boolean | null = null;
+let lastError: string | null = null;
 const startedAt = Date.now();
 
-// Real mode needs a reachable Anvil fork (Part 1's reader always talks to
-// LOCAL_RPC_URL, never mainnet directly -- see agent/src/config.ts) plus a
-// watched address. None of that is assumed present, so this probes rather
-// than asserting -- a deploy without a fork sidecar falls back to mock mode
-// instead of crashing on boot.
+// Real mode needs a reachable RPC -- mainnet (READ_RPC_URL resolves to
+// MAINNET_RPC when READ_MODE=mainnet, see agent/src/config.ts) or a local
+// Anvil fork, either works -- plus a watched address. Neither is assumed
+// present, so this probes rather than asserting: a deploy with no reachable
+// RPC falls back to mock mode instead of crashing on boot. No fork sidecar
+// or FORK_BLOCK is required for this path -- readPosition/assess are pure
+// reads and pin their own block per call.
 async function startRealMode(): Promise<(() => Promise<void>) | null> {
   const watchAddress = process.env.WATCH_ADDRESS;
-  if (!watchAddress || !process.env.MAINNET_RPC || !process.env.FORK_BLOCK) {
+  const rpcUrl = READ_RPC_URL || MAINNET_RPC;
+  if (!watchAddress || !rpcUrl) {
     return null;
   }
 
   try {
-    const probe = await fetch(`http://127.0.0.1:${process.env.ANVIL_PORT ?? 8545}`, {
+    const probe = await fetch(rpcUrl, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] }),
-      signal: AbortSignal.timeout(2000),
+      signal: AbortSignal.timeout(5000),
     });
     if (!probe.ok) return null;
   } catch {
@@ -97,9 +104,15 @@ async function main() {
     tick()
       .then(() => {
         ticksRun += 1;
+        lastTickAt = Date.now();
+        lastTickOk = true;
+        lastError = null;
       })
       .catch((err) => {
         console.error('[keeper] tick failed:', err);
+        lastTickAt = Date.now();
+        lastTickOk = false;
+        lastError = err instanceof Error ? err.message : String(err);
       });
   };
   run();
@@ -120,7 +133,17 @@ async function main() {
 
     if (url.pathname === '/health') {
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', mode, ticksRun, uptimeMs: Date.now() - startedAt }));
+      res.end(
+        JSON.stringify({
+          status: 'ok',
+          mode,
+          ticksRun,
+          uptimeMs: Date.now() - startedAt,
+          lastTickAt,
+          lastTickOk,
+          lastError,
+        }),
+      );
       return;
     }
 
