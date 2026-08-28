@@ -139,6 +139,15 @@ cd contracts && forge build && forge test
 
 The shield never takes custody of user funds. A user grants exactly two revocable things: an aToken approval capped at a maximum releasable amount, and a policy entry (trigger HF, target HF, max cost, allowed collaterals, expiry). The blast radius of anything going wrong is bounded by that approval — the same pattern Aave's own debt-swap adapters use.
 
+## Team
+
+| | |
+|---|---|
+| **Pragatish** | [@Pragatish616](https://github.com/Pragatish616) |
+| **Vijayaraghavan M** | [@luckynest7-beep](https://github.com/luckynest7-beep) |
+| **Gokul Nath S** | [@Gokulnath-AI](https://github.com/Gokulnath-AI) |
+| **Ravi R Kamath** | [@ravi-kamath07](https://github.com/ravi-kamath07) |
+
 ## License
 
-[MIT](./LICENSE)
+MIT — see [LICENSE](./LICENSE). Copyright © 2026 the Liquidation Shield team.

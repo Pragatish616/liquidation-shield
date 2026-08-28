@@ -17,6 +17,12 @@
   },
   "keywords": ["aave", "defi", "liquidation", "flash-loan", "ethereum"],
   "author": "",
+  "contributors": [
+    { "name": "Pragatish", "url": "https://github.com/Pragatish616" },
+    { "name": "Vijayaraghavan M", "url": "https://github.com/luckynest7-beep" },
+    { "name": "Gokul Nath S", "url": "https://github.com/Gokulnath-AI" },
+    { "name": "Ravi R Kamath", "url": "https://github.com/ravi-kamath07" }
+  ],
   "license": "MIT",
   "devEngines": {
     "packageManager": {
