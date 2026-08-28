@@ -25,7 +25,6 @@
   "dependencies": {
     "@bgd-labs/aave-address-book": "^4.44.22",
     "dotenv": "^17.4.2",
-    "jstat": "^1.9.6",
     "viem": "^2.56.0",
     "zod": "^4.4.3"
   },
