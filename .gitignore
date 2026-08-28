@@ -1,5 +1,9 @@
 .env
+.env.local
 node_modules/
 contracts/out/
 contracts/cache/
 *.log
+decision*.log.json
+dashboard/.next/
+dashboard/package-lock.json

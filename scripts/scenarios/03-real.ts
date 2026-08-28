@@ -16,7 +16,7 @@ const user =
   (process.argv[2] as `0x${string}` | undefined) ??
   '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'; // Step 4's seeded WETH/USDC position
 
-const logPath = resolve('scripts/scenarios/decision-real.log.json');
+const logPath = resolve('decision-real.log.json');
 if (existsSync(logPath)) unlinkSync(logPath);
 
 console.log('=== Demo 03 — Real Part 1/2 keeper tick ===');

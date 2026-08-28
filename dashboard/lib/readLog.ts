@@ -16,26 +16,22 @@ export interface DecisionRecord {
   reason?: string;
 }
 
-export function getLogPath(scenario: 'save' | 'refuse' | 'default' = 'save'): string {
+export function getLogPath(scenario: 'real' | 'save' | 'refuse' = 'real'): string {
   if (process.env.DECISION_LOG_PATH && existsSync(process.env.DECISION_LOG_PATH)) {
     return process.env.DECISION_LOG_PATH;
   }
 
-  const filename = scenario === 'refuse' ? 'decision-refuse.log.json' : 'decision-save.log.json';
+  const filename =
+    scenario === 'refuse'
+      ? 'decision-refuse.log.json'
+      : scenario === 'save'
+        ? 'decision-save.log.json'
+        : 'decision-real.log.json';
 
-  const candidates = [
-    resolve(process.cwd(), `../../backend/${filename}`),
-    resolve(process.cwd(), `../backend/${filename}`),
-    resolve(process.cwd(), `../../backend/decision.log.json`),
-  ];
-
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) {
-      return candidate;
-    }
-  }
-
-  return resolve(process.cwd(), `../../backend/${filename}`);
+  // pnpm demo:real / demo:save / demo:refuse all write to the repo root
+  // (resolve('decision-*.log.json') from wherever pnpm is invoked); the
+  // dashboard runs from dashboard/, one level down.
+  return resolve(process.cwd(), '..', filename);
 }
 
 export function readDecisions(path: string): DecisionRecord[] {
