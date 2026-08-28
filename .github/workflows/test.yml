@@ -35,6 +35,13 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+        with:
+          # Foundry >=1.8.0 added a network-family auto-detect probe
+          # (anvil_nodeInfo) that hard-fails against production RPC
+          # providers (Alchemy, Infura) that don't implement that
+          # Anvil-only debug method -- the fork test needs a real provider.
+          # Same pin scripts/fork.sh already documents and requires locally.
+          version: v1.7.1
 
       - name: Show Forge version
         run: forge --version
