@@ -9,10 +9,17 @@
 import type { Address } from 'viem';
 import { pathToFileURL } from 'node:url';
 import { readPosition } from '../reader/readPosition';
-import { computeSigmaPerSec } from './ewma';
+import { computeSigmaPerSec, type SigmaPerSec } from './ewma';
 import { loadAlignedSeries, hasPriceHistory } from './priceHistory';
 import { pLiquidation } from './hitting';
-import { targetHealthFactor, triggerHealthFactor, classifyUrgency, DEFAULT_POLICY } from './buffer';
+import {
+  targetHealthFactor,
+  triggerHealthFactor,
+  classifyUrgency,
+  DEFAULT_POLICY,
+  type RiskPolicy,
+} from './buffer';
+import { REACTION_WINDOW_SEC as ENV_REACTION_WINDOW_SEC, RISK_Z as ENV_RISK_Z } from '../config';
 import type { RiskAssessment } from '../types';
 
 const DAY_SEC = 86400;
@@ -22,9 +29,22 @@ function dominantLeg<T extends { symbol: string; valueUsd: number }>(legs: T[]):
   return legs.reduce((max, leg) => (leg.valueUsd > max.valueUsd ? leg : max));
 }
 
-export async function assess(user: Address): Promise<RiskAssessment> {
+export async function assess(
+  user: Address,
+  policyOverrides?: Partial<RiskPolicy>,
+  sigmaOverride?: SigmaPerSec,
+): Promise<RiskAssessment> {
   const snapshot = await readPosition(user);
   const reasons: string[] = [];
+
+  // Layering: RiskPolicy's own defaults < env (a runtime knob, no source
+  // edit needed -- see plan.md §7 acceptance criterion 4) < explicit
+  // policyOverrides argument (callers, e.g. a scenario script, get the
+  // final say).
+  const envOverrides: Partial<RiskPolicy> = {};
+  if (ENV_REACTION_WINDOW_SEC !== undefined) envOverrides.reactionWindowSec = ENV_REACTION_WINDOW_SEC;
+  if (ENV_RISK_Z !== undefined) envOverrides.z = ENV_RISK_Z;
+  const policy: RiskPolicy = { ...DEFAULT_POLICY, ...envOverrides, ...policyOverrides };
 
   const collateralLeg = dominantLeg(snapshot.collateral);
   const debtLeg = dominantLeg(snapshot.debt);
@@ -41,13 +61,20 @@ export async function assess(user: Address): Promise<RiskAssessment> {
   }
 
   const { a: collateralSeries, b: debtSeries } = loadAlignedSeries(collateralLeg.symbol, debtLeg.symbol);
-  const sigma = computeSigmaPerSec(collateralSeries, debtSeries);
+  const modelSigma = computeSigmaPerSec(collateralSeries, debtSeries);
   reasons.push(
     `sigma (per-second, EWMA lambda=0.97 over ${collateralSeries.length} hourly ` +
-      `${collateralLeg.symbol}/${debtLeg.symbol} samples): ${sigma.toExponential(4)}`,
+      `${collateralLeg.symbol}/${debtLeg.symbol} samples): ${modelSigma.toExponential(4)}`,
   );
 
-  const policy = DEFAULT_POLICY;
+  // data/prices/ is a static cache -- it cannot react to a fork price crash,
+  // so without this override the buffer can never widen during the live
+  // demo (plan.md §4.1 option 3).
+  const sigma = sigmaOverride ?? modelSigma;
+  if (sigmaOverride !== undefined) {
+    reasons.push(`sigma overridden by scenario: ${sigma.toExponential(4)} per-sec`);
+  }
+
   const reactionWindowSec = policy.reactionWindowSec;
 
   const targetHF = targetHealthFactor(sigma, policy);
@@ -64,8 +91,17 @@ export async function assess(user: Address): Promise<RiskAssessment> {
       `P(within 24h) = ${(pLiq24h * 100).toFixed(4)}%`,
   );
 
-  const urgency = classifyUrgency(snapshot.healthFactor, pLiq, policy);
-  reasons.push(`urgency=${urgency} (HF=${snapshot.healthFactor.toFixed(4)})`);
+  // Urgency is classified over policy.urgencyHorizonSec, not the ~300s-4h
+  // reaction window -- the watch/act thresholds are calibrated for a 1h-24h
+  // horizon (plan.md §4.2's sanity table) and pLiq over the reaction window
+  // alone is always near-zero, which is why urgency used to only ever land
+  // on 'none' or 'emergency'.
+  const pLiqUrgency = pLiquidation(snapshot.healthFactor, sigma, policy.urgencyHorizonSec);
+  const urgency = classifyUrgency(snapshot.healthFactor, pLiqUrgency, policy);
+  reasons.push(
+    `urgency=${urgency} (HF=${snapshot.healthFactor.toFixed(4)}, driven by ` +
+      `P(liquidation within ${policy.urgencyHorizonSec}s) = ${(pLiqUrgency * 100).toFixed(4)}%)`,
+  );
 
   return {
     snapshot,

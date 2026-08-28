@@ -29,6 +29,15 @@ export type RiskPolicy = {
   maxTargetHF: number;
   /** trigger fires once this fraction of the buffer above 1.0 has been lost */
   triggerFraction: number;
+  /**
+   * Horizon (seconds) that pLiq is computed over for urgency classification.
+   * The 0.5%/5% thresholds below come from plan.md §4.2's sanity table, which
+   * is scaled for 1h-24h horizons -- they are meaningless applied to a
+   * pLiq computed over the ~300s reaction window (that pLiq is always
+   * near-zero regardless of real risk, which is why urgency used to only
+   * ever land on 'none' or 'emergency').
+   */
+  urgencyHorizonSec: number;
   urgencyThresholds: {
     watchPLiq: number;
     actPLiq: number;
@@ -36,14 +45,22 @@ export type RiskPolicy = {
   };
 };
 
+// Calibrated against the real measured sigma in data/prices/ (WETH/USDC,
+// sigmaPerSec ~7.7e-5 -- see buffer.test.ts). floorBuffer and minTargetHF are
+// safety floors, but they must stay BELOW the model's typical output under
+// realistic-to-elevated volatility, or the "dynamic" buffer just returns the
+// floor at every reading, unconditionally. reactionWindowSec is deliberately
+// the worst case (keeper interval + block time + congestion allowance), not
+// the best case -- see plan.md §4.3.
 export const DEFAULT_POLICY: RiskPolicy = {
   z: 2.0,
-  reactionWindowSec: 300,
+  reactionWindowSec: 3600,
   oracleStalenessMultiplier: 1.05,
-  floorBuffer: 0.05,
-  minTargetHF: 1.05,
+  floorBuffer: 0.02,
+  minTargetHF: 1.02,
   maxTargetHF: 2.0,
   triggerFraction: 0.6,
+  urgencyHorizonSec: 86400,
   urgencyThresholds: {
     watchPLiq: 0.005,
     actPLiq: 0.05,
