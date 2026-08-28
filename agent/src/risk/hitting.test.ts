@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { pLiquidation, normalCdf } from './hitting';
+import { asSigmaPerSec, type SigmaPerSec } from './ewma';
 
 const HOUR = 3600;
 
 /** Convert an hourly-sampled sigma into the module's canonical per-second unit. */
-function sigmaPerSecFromHourly(sigmaHourly: number): number {
-  return sigmaHourly / Math.sqrt(HOUR);
+function sigmaPerSecFromHourly(sigmaHourly: number): SigmaPerSec {
+  return asSigmaPerSec(sigmaHourly / Math.sqrt(HOUR));
 }
 
 describe('normalCdf', () => {
@@ -41,13 +42,13 @@ describe('pLiquidation — boundary and monotonicity properties', () => {
   });
 
   it('P = 1 when HF <= 1 (already liquidatable)', () => {
-    expect(pLiquidation(1.0, 0.001, HOUR)).toBe(1);
-    expect(pLiquidation(0.95, 0.001, HOUR)).toBe(1);
+    expect(pLiquidation(1.0, asSigmaPerSec(0.001), HOUR)).toBe(1);
+    expect(pLiquidation(0.95, asSigmaPerSec(0.001), HOUR)).toBe(1);
   });
 
   it('P -> 0 as sigma -> 0', () => {
-    expect(pLiquidation(1.3, 1e-9, HOUR)).toBeCloseTo(0, 6);
-    expect(pLiquidation(1.3, 0, HOUR)).toBe(0);
+    expect(pLiquidation(1.3, asSigmaPerSec(1e-9), HOUR)).toBeCloseTo(0, 6);
+    expect(pLiquidation(1.3, asSigmaPerSec(0), HOUR)).toBe(0);
   });
 
   it('is monotonically increasing in horizon T, holding HF and sigma fixed', () => {

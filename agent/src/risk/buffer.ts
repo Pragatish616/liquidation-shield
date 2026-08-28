@@ -13,6 +13,9 @@
  * grows.
  */
 
+import type { SigmaPerSec } from './ewma';
+import type { PLiq } from './hitting';
+
 export type RiskPolicy = {
   /** confidence multiplier on the volatility term, e.g. 2.0 ≈ 97.7% one-sided */
   z: number;
@@ -48,7 +51,7 @@ export const DEFAULT_POLICY: RiskPolicy = {
   },
 };
 
-export function targetHealthFactor(sigmaPerSec: number, policy: RiskPolicy = DEFAULT_POLICY): number {
+export function targetHealthFactor(sigmaPerSec: SigmaPerSec, policy: RiskPolicy = DEFAULT_POLICY): number {
   const volTerm = policy.z * sigmaPerSec * Math.sqrt(policy.reactionWindowSec);
   const buffer = Math.max(policy.floorBuffer, volTerm);
   const raw = 1 + buffer * policy.oracleStalenessMultiplier;
@@ -63,7 +66,7 @@ export type Urgency = 'none' | 'watch' | 'act' | 'emergency';
 
 export function classifyUrgency(
   hf: number,
-  pLiq: number,
+  pLiq: PLiq,
   policy: RiskPolicy = DEFAULT_POLICY,
 ): Urgency {
   if (hf < policy.urgencyThresholds.emergencyHF) return 'emergency';

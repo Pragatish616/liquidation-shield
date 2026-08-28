@@ -8,6 +8,15 @@
  *   sigmaPerSec = sigmaPerPeriod / Math.sqrt(periodSeconds)
  */
 
+import type { SigmaPerSec } from './ewma';
+
+/** Branded liquidation probability. Construct via asPLiq(), never a bare `as` cast. */
+export type PLiq = number & { readonly __brand: 'PLiq' };
+
+export function asPLiq(n: number): PLiq {
+  return n as PLiq;
+}
+
 /** Standard normal CDF via the Abramowitz-Stegun 7.1.26 erf approximation (max abs error ~1.5e-7). */
 function erf(x: number): number {
   const sign = x < 0 ? -1 : 1;
@@ -33,12 +42,12 @@ export function normalCdf(x: number): number {
  *
  * P_liq(T) = 2 * Φ( -ln(HF) / (sigmaPerSec * sqrt(T)) )
  */
-export function pLiquidation(hf: number, sigmaPerSec: number, horizonSec: number): number {
-  if (hf <= 1) return 1;
-  if (horizonSec <= 0) return 0;
-  if (sigmaPerSec <= 0) return 0; // no volatility, driftless GBM never crosses a barrier below
+export function pLiquidation(hf: number, sigmaPerSec: SigmaPerSec, horizonSec: number): PLiq {
+  if (hf <= 1) return asPLiq(1);
+  if (horizonSec <= 0) return asPLiq(0);
+  if (sigmaPerSec <= 0) return asPLiq(0); // no volatility, driftless GBM never crosses a barrier below
 
   const b = Math.log(hf); // distance to barrier in log space, b > 0 since hf > 1
   const s = sigmaPerSec * Math.sqrt(horizonSec);
-  return Math.min(1, 2 * normalCdf(-b / s));
+  return asPLiq(Math.min(1, 2 * normalCdf(-b / s)));
 }

@@ -7,6 +7,13 @@
 
 export type PricePoint = { t: number; price: number }; // t = unix seconds
 
+/** Branded per-second volatility. Construct via asSigmaPerSec(), never a bare `as` cast. */
+export type SigmaPerSec = number & { readonly __brand: 'SigmaPerSec' };
+
+export function asSigmaPerSec(n: number): SigmaPerSec {
+  return n as SigmaPerSec;
+}
+
 export function logReturns(series: number[]): number[] {
   const out: number[] = [];
   for (let i = 1; i < series.length; i++) {
@@ -33,9 +40,9 @@ export function ewmaVolatility(returns: number[], lambda: number): number {
 }
 
 /** Scale a sigma sampled every `sampleIntervalSec` seconds to the canonical per-second unit. */
-export function sigmaPerSecond(sigmaPerSample: number, sampleIntervalSec: number): number {
+export function sigmaPerSecond(sigmaPerSample: number, sampleIntervalSec: number): SigmaPerSec {
   if (sampleIntervalSec <= 0) throw new Error('sampleIntervalSec must be positive');
-  return sigmaPerSample / Math.sqrt(sampleIntervalSec);
+  return asSigmaPerSec(sigmaPerSample / Math.sqrt(sampleIntervalSec));
 }
 
 function ratioSeries(collateral: PricePoint[], debt: PricePoint[]): number[] {
@@ -72,7 +79,7 @@ export function computeSigmaPerSec(
   collateral: PricePoint[],
   debt: PricePoint[],
   lambda = 0.97,
-): number {
+): SigmaPerSec {
   if (collateral.length < 3) {
     throw new Error('need at least 3 price points to estimate volatility');
   }
