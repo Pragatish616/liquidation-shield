@@ -2,12 +2,18 @@
 src = "src"
 out = "out"
 libs = ["lib"]
+solc_version = "0.8.24"
+optimizer = true
+optimizer_runs = 200
+via_ir = true
+remappings = [
+  "@openzeppelin/=lib/openzeppelin-contracts/",
+  "forge-std/=lib/forge-std/src/",
+]
+fs_permissions = [{ access = "read-write", path = "./" }]
 
 [rpc_endpoints]
 mainnet = "${MAINNET_RPC}"
-
-# aave-v3-origin / v3-periphery / openzeppelin installs are deferred to
-# Part 2/3's scope -- Part 1 only needs MockAggregator.sol, which has no
-# external imports.
+local = "http://localhost:8545"
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

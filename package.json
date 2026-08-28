@@ -9,7 +9,10 @@
     "crash": "tsx scripts/crashPrice.ts",
     "assess": "tsx agent/src/risk/assess.ts",
     "plan": "tsx agent/src/planner-cli.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:keeper": "node --test --experimental-strip-types agent/src/keeper-backend/tests/*.test.ts",
+    "demo:save": "node --experimental-strip-types scripts/scenarios/01-save.ts",
+    "demo:refuse": "node --experimental-strip-types scripts/scenarios/02-refuse.ts"
   },
   "keywords": [],
   "author": "",

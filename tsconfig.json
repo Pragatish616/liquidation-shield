@@ -38,5 +38,12 @@
     "skipLibCheck": true,
 
     "moduleResolution": "bundler",
-  }
+  },
+  // keeper-backend (Part 4) uses Node's native --experimental-strip-types
+  // runner with .ts-suffixed relative imports (its own working convention,
+  // has its own tests via `node --test`), incompatible with this project's
+  // bundler resolution -- excluded here rather than rewritten under time
+  // pressure. dashboard/ is a separate Next.js project with its own
+  // tsconfig.json.
+  "exclude": ["node_modules", "agent/src/keeper-backend", "dashboard", "contracts", "scripts/scenarios"]
 }
