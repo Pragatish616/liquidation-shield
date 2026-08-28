@@ -143,6 +143,22 @@ cd contracts && forge build && forge test
 - **Dashboard → Vercel**: import this repo, set the project's **Root Directory to `dashboard`**. Optionally set `BACKEND_URL` to point it at a deployed backend.
 - **Keeper backend → Render** (or any Node host): `pnpm server` starts an HTTP server (`agent/src/keeper-backend/src/server.ts`) that runs the same assess → plan → execute/refuse pipeline on a timer and exposes it at `GET /api/decisions`. A `render.yaml` blueprint is included at the repo root. Real on-chain mode reads live mainnet state — no Anvil fork required, since `readPosition`/`assess` are pure reads that pin their own block per call — activating automatically when `WATCH_ADDRESS` is set and a read RPC is reachable (`READ_RPC_URL`, or `MAINNET_RPC` with `READ_MODE=mainnet`, which is how `render.yaml` is configured). Execution stays simulated either way (`executeMock`, see `agent/src/keeper-backend/src/executor/executor.ts`) — this reads real positions and computes real health factors, it does not send real transactions. Without a reachable RPC or `WATCH_ADDRESS`, it falls back to a continuously-ticking simulated market so the deployed backend is always genuinely live. Fork-based real mode (`FORK_BLOCK` + a local Anvil fork) still works for local dev via `LOCAL_RPC_URL`, unchanged.
 
+## Alerting & automation
+
+An optional [n8n](https://n8n.io/) workflow ([`automation/n8n/liquidation-shield.json`](automation/n8n/liquidation-shield.json)) watches the deployed backend and emails on state changes. It's operational tooling that sits outside the system — nothing it does feeds back into Sense/Decide/Act.
+
+- **Alerting** — polls `GET /api/status` every 5 minutes, classifies `verdict` and `hf` vs. `targetHF` into `OK` / `BREACH` / `EXECUTE`, and emails only on a state *transition* (not every poll — the keeper ticks every 15s, so naive polling would spam an inbox). The same 5-minute cadence doubles as a keep-alive: Render's free tier sleeps after ~15 minutes idle, and those cold starts are what make the ElevenLabs voice agent feel slow.
+- **Daily digest** — once a day at 09:00, summarizes the last 24h of `GET /api/decisions` — executes, refusals, capital burned, capital repaid, min/last HF, and a breakdown of refusal reasons — into a single email.
+
+Import the JSON into n8n (**Workflows → Import from File**) and wire up two credentials by hand — exported n8n workflow JSON never contains credential secrets, only credential *names*:
+
+| Credential | Type | Value |
+|---|---|---|
+| `Shield API Token` | Header Auth | `Authorization: Bearer <AGENT_API_TOKEN>` — the same shared secret already set as `AGENT_API_TOKEN` on the Render service (Render dashboard → the backend service → Environment), reused from the ElevenLabs webhook tool rather than minted fresh |
+| `Gmail account` | Gmail OAuth2 | n8n Cloud's managed "Sign in with Google" — n8n provides the OAuth app, so there's no Google Cloud Console project, client ID, or secret to create |
+
+Full setup — including the SMTP / Gmail App Password fallback for plans without managed OAuth — is documented in [`automation/n8n/README.md`](automation/n8n/README.md).
+
 ## Non-custodial by design
 
 The shield never takes custody of user funds. A user grants exactly two revocable things: an aToken approval capped at a maximum releasable amount, and a policy entry (trigger HF, target HF, max cost, allowed collaterals, expiry). The blast radius of anything going wrong is bounded by that approval — the same pattern Aave's own debt-swap adapters use.
