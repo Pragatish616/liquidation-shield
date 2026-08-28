@@ -1,2 +1,7 @@
+# Verified against pnpm@11.24.0 (installed): `allowBuilds` (nested package -> boolean map)
+# is the current schema for approving postinstall/build scripts. The older
+# onlyBuiltDependencies / onlyBuiltDependenciesFile / neverBuiltDependencies /
+# ignoredBuiltDependencies keys were replaced by allowBuilds in pnpm 11 and are
+# silently ignored since -- do not "migrate" this back to onlyBuiltDependencies.
 allowBuilds:
   esbuild: true
