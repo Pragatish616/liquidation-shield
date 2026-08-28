@@ -45,11 +45,13 @@ export async function readPosition(
   blockNumber?: bigint,
   client: PublicClient = makePublicClient(),
 ): Promise<PositionSnapshot> {
-  const { pool, poolDataProvider, oracle } = await resolveAaveAddresses(client);
-  const block = blockNumber ?? (await client.getBlockNumber());
+  const [{ pool, poolDataProvider, oracle }, block] = await Promise.all([
+    resolveAaveAddresses(client),
+    blockNumber ? Promise.resolve(blockNumber) : client.getBlockNumber(),
+  ]);
   const reserves = await getAllReserves(client, poolDataProvider);
 
-  const [accountData, userEMode, userReserveResults] = await Promise.all([
+  const [accountData, userEMode, userReserveResults, blockInfo] = await Promise.all([
     client.readContract({
       address: pool,
       abi: poolAbi,
@@ -77,6 +79,7 @@ export async function readPosition(
       allowFailure: false,
       blockNumber: block,
     }),
+    client.getBlock({ blockNumber: block }),
   ]);
 
   assertNotEMode(Number(userEMode));
@@ -95,73 +98,66 @@ export async function readPosition(
     }
   });
 
-  const configResults =
+  // Independent reads at the same pinned block -- run in parallel rather
+  // than sequentially, this was ~1s of dead time on the assess() CLI's
+  // <2s acceptance criterion (instructions.md Step 9) before this fix.
+  const [configResults, tokenResults, priceResults, debtCeilingResults] =
     touched.length > 0
-      ? await client.multicall({
-          contracts: touched.map(
-            ({ reserve }) =>
-              ({
-                address: poolDataProvider,
-                abi: poolDataProviderAbi,
-                functionName: 'getReserveConfigurationData',
-                args: [reserve.address],
-              }) as const,
-          ),
-          allowFailure: false,
-          blockNumber: block,
-        })
-      : [];
-
-  const tokenResults =
-    touched.length > 0
-      ? await client.multicall({
-          contracts: touched.map(
-            ({ reserve }) =>
-              ({
-                address: poolDataProvider,
-                abi: poolDataProviderAbi,
-                functionName: 'getReserveTokensAddresses',
-                args: [reserve.address],
-              }) as const,
-          ),
-          allowFailure: false,
-          blockNumber: block,
-        })
-      : [];
-
-  const priceResults =
-    touched.length > 0
-      ? await client.multicall({
-          contracts: touched.map(
-            ({ reserve }) =>
-              ({
-                address: oracle,
-                abi: aaveOracleAbi,
-                functionName: 'getAssetPrice',
-                args: [reserve.address],
-              }) as const,
-          ),
-          allowFailure: false,
-          blockNumber: block,
-        })
-      : [];
-
-  const debtCeilingResults =
-    touched.length > 0
-      ? await client.multicall({
-          contracts: touched.map(
-            ({ reserve }) =>
-              ({
-                address: poolDataProvider,
-                abi: poolDataProviderAbi,
-                functionName: 'getDebtCeiling',
-                args: [reserve.address],
-              }) as const,
-          ),
-          allowFailure: false,
-          blockNumber: block,
-        })
-      : [];
+      ? await Promise.all([
+          client.multicall({
+            contracts: touched.map(
+              ({ reserve }) =>
+                ({
+                  address: poolDataProvider,
+                  abi: poolDataProviderAbi,
+                  functionName: 'getReserveConfigurationData',
+                  args: [reserve.address],
+                }) as const,
+            ),
+            allowFailure: false,
+            blockNumber: block,
+          }),
+          client.multicall({
+            contracts: touched.map(
+              ({ reserve }) =>
+                ({
+                  address: poolDataProvider,
+                  abi: poolDataProviderAbi,
+                  functionName: 'getReserveTokensAddresses',
+                  args: [reserve.address],
+                }) as const,
+            ),
+            allowFailure: false,
+            blockNumber: block,
+          }),
+          client.multicall({
+            contracts: touched.map(
+              ({ reserve }) =>
+                ({
+                  address: oracle,
+                  abi: aaveOracleAbi,
+                  functionName: 'getAssetPrice',
+                  args: [reserve.address],
+                }) as const,
+            ),
+            allowFailure: false,
+            blockNumber: block,
+          }),
+          client.multicall({
+            contracts: touched.map(
+              ({ reserve }) =>
+                ({
+                  address: poolDataProvider,
+                  abi: poolDataProviderAbi,
+                  functionName: 'getDebtCeiling',
+                  args: [reserve.address],
+                }) as const,
+            ),
+            allowFailure: false,
+            blockNumber: block,
+          }),
+        ])
+      : [[], [], [], []];
 
   const collateral: CollateralLeg[] = [];
   const debt: DebtLeg[] = [];
@@ -218,8 +214,6 @@ export async function readPosition(
 
   const onChainHF = accountData[5];
   const onChainHealthFactor = onChainHF === MAX_UINT256 ? Infinity : Number(onChainHF) / 1e18;
-
-  const blockInfo = await client.getBlock({ blockNumber: block });
 
   return {
     user,
