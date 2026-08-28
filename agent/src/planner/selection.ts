@@ -17,6 +17,11 @@ export interface CollateralAsset {
   balanceUsd: number;
   approvalRemainingUsd: number;
   aTokenAddress: Address;
+  /** Aave liquidation bonus multiplier, e.g. 1.05 for 5% (stables/ETH), 1.10
+   *  for WBTC. From the real per-reserve liquidationBonusBps (Part 1).
+   *  Optional -- callers that don't plumb it (e.g. the mock demo path) fall
+   *  back to viability.ts's own 1.05 default. */
+  liquidationBonus?: number | undefined;
 }
 
 export interface DebtAsset {
@@ -72,6 +77,12 @@ export interface CandidateRouteEvaluation {
   isConstrained: boolean;
   limitingFactor: LimitingFactor;
   quote: RouteQuoteResult | null;
+  /** Ceiling on collateral spent by the exact-output swap (releaseUnits'
+   *  worth at most, buffered quote.amountIn otherwise) -- see
+   *  contracts/src/LiquidationShield.sol's executeOperation, which passes
+   *  this as swapExactOutput's maxAmountIn instead of the full
+   *  releaseUnits. */
+  maxAmountIn: bigint;
   reasonCode?: string;
   reasons: string[];
 }
@@ -178,13 +189,14 @@ export async function evaluatePairCandidate(
 
   // Real-world caps (balance, policy limit, approval allowance, debt cap)
   // can shrink the release/repay below what solveKappaFixedPoint originally
-  // sized and quoted for. If we kept that stale, larger quote, its
-  // minAmountOut would still target the ORIGINAL (larger) repay amount --
-  // for an exact-output swap that's now asking for less output while still
-  // requiring at least the old, higher output floor, a contradiction that
-  // would revert on-chain. Re-quote for the actual clamped amount whenever
-  // clamping changed it (relative epsilon, not absolute, so it also
-  // triggers on small-position candidates where a few cents is material).
+  // sized and quoted for. If we kept that stale, larger quote, its amountIn
+  // would still target the ORIGINAL (larger) repay amount -- for an
+  // exact-output swap that's now asking for less output while still
+  // authorized to spend collateral sized for the old, larger trade, a
+  // needlessly loose ceiling. Re-quote for the actual clamped amount
+  // whenever clamping changed it (relative epsilon, not absolute, so it
+  // also triggers on small-position candidates where a few cents is
+  // material).
   let effectiveQuote = fixedPoint.quote;
   const repayShrunk =
     fixedPoint.repayUsd > 0 &&
@@ -203,7 +215,7 @@ export async function evaluatePairCandidate(
         urgency: policy.urgency,
       });
       reasons.push(
-        `Re-quoted after clamping: release shrank from $${fixedPoint.releaseUsd.toFixed(2)} to $${clamped.clampedReleaseUsd.toFixed(2)}, so the original quote's minAmountOut (sized for the larger amount) was stale and has been refreshed.`,
+        `Re-quoted after clamping: release shrank from $${fixedPoint.releaseUsd.toFixed(2)} to $${clamped.clampedReleaseUsd.toFixed(2)}, so the original quote's amountIn (sized for the larger amount) was stale and has been refreshed.`,
       );
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -213,6 +225,39 @@ export async function evaluatePairCandidate(
         'REQUOTE_AFTER_CLAMP_FAILED',
         [
           `Clamping shrank release to $${clamped.clampedReleaseUsd.toFixed(2)}, but re-quoting for the new amount failed: ${errMsg}`,
+        ],
+      );
+    }
+  }
+
+  // The on-chain trade is bounded by maxAmountIn, not the full releaseUnits
+  // (see contracts/src/LiquidationShield.sol's executeOperation) -- using
+  // releaseUnits there let the swap spend far more than the quote actually
+  // needed before reverting (~172bps of real slack vs. the intended
+  // slippageToleranceBps in the reported bug). Buffer the quote's own
+  // amountIn by its slippage tolerance and never authorize more than what's
+  // actually being released.
+  let maxAmountIn = 0n;
+  if (effectiveQuote) {
+    const bufferedAmountIn =
+      (effectiveQuote.amountIn * BigInt(10000 + effectiveQuote.slippageToleranceBps)) / 10000n;
+    maxAmountIn = bufferedAmountIn > releaseUnits ? releaseUnits : bufferedAmountIn;
+
+    // Sanity floor: maxAmountIn must cover at least the swap's own bare
+    // nominal requirement, or the trade can never succeed at all -- the
+    // exact-output swap is all-or-nothing, so an under-sized ceiling can't
+    // silently under-repay the flash loan the way a bad minAmountOut floor
+    // could, but it would still guarantee a revert. This is provably
+    // unreachable given kappa's sizing always leaves releaseUnits >=
+    // effectiveQuote.amountIn (kappa includes the flash premium and gas on
+    // top of the swap cost alone), kept as a defensive regression guard.
+    if (maxAmountIn < effectiveQuote.amountIn) {
+      return createInfeasibleCandidate(
+        collateral,
+        debt,
+        'MAX_AMOUNT_IN_TOO_TIGHT',
+        [
+          `maxAmountIn (${maxAmountIn}) is below the swap's own nominal requirement (${effectiveQuote.amountIn}) -- this route cannot guarantee completing its own trade, let alone repaying the flash loan.`,
         ],
       );
     }
@@ -240,7 +285,9 @@ export async function evaluatePairCandidate(
   reasons.push(clamped.diagnostics);
 
   const priceImpactBps = effectiveQuote?.priceImpactBps ?? 0;
-  const totalCostUsd = clamped.capitalBurnedUsd + fixedPoint.gasUsd;
+  // clamped.capitalBurnedUsd is already all-in (kappa's gasFriction term
+  // folds gas in -- see costModel.ts) -- do not add fixedPoint.gasUsd again.
+  const totalCostUsd = clamped.capitalBurnedUsd;
 
   return {
     collateral,
@@ -264,6 +311,7 @@ export async function evaluatePairCandidate(
     isConstrained: clamped.isConstrained,
     limitingFactor: clamped.limitingFactor,
     quote: effectiveQuote,
+    maxAmountIn,
     reasons,
   };
 }
@@ -296,6 +344,7 @@ function createInfeasibleCandidate(
     isConstrained: false,
     limitingFactor: 'NONE',
     quote: null,
+    maxAmountIn: 0n,
     reasonCode,
     reasons,
   };

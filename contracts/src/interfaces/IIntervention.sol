@@ -16,7 +16,12 @@ interface IIntervention {
         address debtAsset;
         uint256 releaseAmount;
         uint256 repayAmount;
-        uint256 minAmountOut;
+        // Ceiling on collateral spent by the exact-output swap that produces
+        // repayAmount + premium debt tokens (see LiquidationShield's
+        // executeOperation) -- computed off-chain from a quote with a
+        // slippage buffer, always <= releaseAmount. Bounds the trade far
+        // more tightly than releaseAmount itself would.
+        uint256 maxAmountIn;
         uint256 targetHF;
         bytes swapPath;
         uint256 deadline;

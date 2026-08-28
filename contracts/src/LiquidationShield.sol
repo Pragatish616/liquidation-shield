@@ -174,9 +174,15 @@ contract LiquidationShield is ReentrancyGuard {
         POOL.withdraw(p.collateralAsset, p.releaseAmount, address(this));
 
         // ============ STEP 4: SWAP COLLATERAL -> DEBT ASSET (ExactOutput) ============
+        // maxAmountIn (not releaseAmount) bounds the swap: it's a tight,
+        // quote-derived ceiling with a small slippage buffer, not the full
+        // amount pulled from the user. Using releaseAmount here previously
+        // let the trade spend far more than intended before reverting --
+        // the swap approval still allows up to releaseAmount for STEP 5's
+        // refund math, but the swap itself is now bounded far tighter.
         uint256 owed = amount + premium;
         IERC20(p.collateralAsset).approve(address(SWAPPER), p.releaseAmount);
-        uint256 spent = SWAPPER.swapExactOutput(p.swapPath, owed, p.releaseAmount, p.deadline);
+        uint256 spent = SWAPPER.swapExactOutput(p.swapPath, owed, p.maxAmountIn, p.deadline);
 
         // ============ STEP 5: REFUND LEFTOVER COLLATERAL TO USER ============
         uint256 leftover = p.releaseAmount - spent;

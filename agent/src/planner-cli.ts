@@ -135,7 +135,7 @@ async function main() {
   console.log(`    Repay Amount:            ${plan.repayAmount.toString()} units`);
   console.log(`    Flash Loan Provider:     ${plan.flashProvider} (${plan.flashAmount.toString()} units)`);
   console.log(`    Flash Loan Premium:      ${plan.flashPremium.toString()} units`);
-  console.log(`    On-Chain minAmountOut:   ${plan.minAmountOut.toString()} units`);
+  console.log(`    On-Chain maxAmountIn:    ${plan.maxAmountIn.toString()} units`);
   console.log(`    On-Chain targetHF (1e18):${plan.targetHF.toString()}`);
   console.log(`    Transaction Deadline:    ${plan.deadline.toString()}\n`);
 

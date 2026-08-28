@@ -64,7 +64,7 @@ describe('Intervention Plan Assembly (plan.ts)', () => {
     expect(plan.flashAmount).toBe(plan.repayAmount);
     expect(plan.flashPremium).toBeGreaterThan(0n);
     expect(plan.swapPath.startsWith('0x')).toBe(true);
-    expect(plan.minAmountOut).toBeGreaterThan(0n);
+    expect(plan.maxAmountIn).toBeGreaterThan(0n);
     expect(plan.targetHF).toBe(1350000000000000000n); // 1.35 * 1e18
     expect(plan.deadline).toBeGreaterThan(0n);
 
@@ -87,10 +87,47 @@ describe('Intervention Plan Assembly (plan.ts)', () => {
     expect(plan.mode).toBe('EXTERNAL_REPAY');
     expect(plan.releaseAmount).toBe(0n);
     expect(plan.swapPath).toBe('0x');
-    expect(plan.minAmountOut).toBe(0n);
+    expect(plan.maxAmountIn).toBe(0n);
     expect(plan.repayAmount).toBeGreaterThan(0n);
     expect(plan.verdict).toBe('EXECUTE');
     expect(plan.reasonCode).toBe('EXTERNAL_RESERVE_REPAY');
     expect(plan.capitalBurnedUsd).toBe(0); // Zero swap friction
+  });
+
+  describe('Gas Is Not Double-Counted End-to-End (regression)', () => {
+    // Every other test in this suite (and selection.test.ts, simulate.test.ts)
+    // sets gasParams: { baseFeeGwei: 0 } to isolate sizing/swap mechanics --
+    // which also means none of them could ever have caught kappa's gas
+    // friction term being summed a second time downstream. This test uses
+    // the realistic DEFAULT gas params (350,000 gas, 20 gwei, $3,000 ETH,
+    // 1.25x safety multiplier -- costModel.ts's own defaults, unmodified) so
+    // gasUsd is genuinely nonzero end-to-end through costModel -> selection
+    // -> viability, and asserts the actual dollar figures a user would see.
+    it('reports capitalBurnedUsd and the derived total cost as the same all-in figure, not capitalBurnedUsd + gasUsd twice', async () => {
+      const plan = await generateInterventionPlan(position, {
+        targetHF: 1.35,
+        pLiq: 0.85,
+        quoter,
+        flashProvider: 'AAVE',
+        // No gasParams override -- realistic nonzero gas.
+      });
+
+      expect(plan.verdict).toBe('EXECUTE');
+      expect(plan.gasUsd).toBeCloseTo(26.25, 2);
+
+      // capitalBurnedUsd is the all-in friction figure (kappa's own
+      // gasFriction term already folds gas in at the costModel.ts level).
+      expect(plan.capitalBurnedUsd).toBeCloseTo(28.35, 2);
+
+      // InterventionPlan doesn't expose expectedCostOfActionUsd directly,
+      // but netBenefitUsd = expectedLossIfIdleUsd - expectedCostOfActionUsd
+      // (viability.ts), so it can be recovered exactly. Before the fix this
+      // was capitalBurnedUsd + gasUsd = 28.35 + 26.25 = $54.60; the correct,
+      // non-double-counted figure is capitalBurnedUsd alone, $28.35.
+      const impliedCostOfAction = plan.expectedLossIfIdleUsd - plan.netBenefitUsd;
+      expect(impliedCostOfAction).toBeCloseTo(28.35, 2);
+      expect(impliedCostOfAction).toBeCloseTo(plan.capitalBurnedUsd, 6);
+      expect(impliedCostOfAction).not.toBeCloseTo(plan.capitalBurnedUsd + plan.gasUsd, 2);
+    });
   });
 });

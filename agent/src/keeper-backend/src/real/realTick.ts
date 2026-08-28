@@ -129,7 +129,7 @@ export async function realTickOnce(opts: RealKeeperOptions): Promise<void> {
       symbol: chosenSymbol ?? plan.mode,
       V: Number(plan.releaseAmount),
       R: Number(plan.repayAmount),
-      minOut: Number(plan.minAmountOut),
+      minOut: Number(plan.maxAmountIn),
       deadline: Number(plan.deadline),
     });
 

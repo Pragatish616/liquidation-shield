@@ -216,7 +216,7 @@ describe('Simulation Dry-Run Harness (simulate.ts)', () => {
         expect(sim.hfRelativeError).toBeLessThanOrEqual(0.005); // <= 0.5% error
         expect(sim.invariants.hfImproved).toBe(true);
         expect(sim.invariants.hfTargetMet).toBe(true);
-        expect(sim.invariants.minAmountOutSatisfied).toBe(true);
+        expect(sim.invariants.maxAmountInSatisfied).toBe(true);
 
         // Check closeness of resulting HF
         expect(sim.postHF).toBeCloseTo(seeded.targetHF, 2);

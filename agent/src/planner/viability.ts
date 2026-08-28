@@ -42,7 +42,8 @@ export interface ViabilityResult {
   overrideType?: OverrideType;
   /** Expected loss if no action is taken: P_liq · closeFactor · D · (bonus − 1) */
   expectedLossIfIdleUsd: number;
-  /** Total cost of intervention: capitalBurned + gas */
+  /** Total cost of intervention: capitalBurnedUsd (already all-in, includes
+   *  gas via kappa's gasFriction term -- see costModel.ts) */
   expectedCostOfActionUsd: number;
   /** Net dollar benefit: expectedLossIfIdle − expectedCostOfAction */
   netBenefitUsd: number;
@@ -75,7 +76,7 @@ export function calculateCloseFactor(currentHF: number, totalDebtUsd: number): n
  *
  * Formula:
  *   expectedLossIfIdle   = pLiq(Δt) · closeFactor · D · (liquidationBonus − 1)
- *   expectedCostOfAction = capitalBurnedUsd + gasUsd
+ *   expectedCostOfAction = capitalBurnedUsd (already all-in, includes gas)
  *   netBenefit           = expectedLossIfIdle − expectedCostOfAction
  *
  * Hard overrides (in strict order):
@@ -103,13 +104,14 @@ export function evaluateViability(inputs: ViabilityInputs): ViabilityResult {
   const expectedLossIfIdleUsd =
     pLiq * closeFactor * totalDebtUsd * bonusFraction;
 
-  const expectedCostOfActionUsd = candidate
-    ? candidate.capitalBurnedUsd + candidate.gasUsd
-    : 0;
+  // candidate.capitalBurnedUsd is already all-in (kappa's gasFriction term
+  // folds gas in -- see costModel.ts) -- do not add candidate.gasUsd again.
+  // gasUsd is still reported separately on the candidate for display.
+  const expectedCostOfActionUsd = candidate ? candidate.capitalBurnedUsd : 0;
 
   const netBenefitUsd = expectedLossIfIdleUsd - expectedCostOfActionUsd;
 
-  const arithmeticExplanation = `Expected liquidation loss: $${expectedLossIfIdleUsd.toFixed(2)} (P_liq ${(pLiq * 100).toFixed(1)}% × ${(closeFactor * 100).toFixed(0)}% close factor × $${totalDebtUsd.toFixed(0)} debt × ${(bonusFraction * 100).toFixed(1)}% bonus) vs Intervention cost: $${expectedCostOfActionUsd.toFixed(2)} ($${candidate?.capitalBurnedUsd.toFixed(2) ?? '0.00'} friction + $${candidate?.gasUsd.toFixed(2) ?? '0.00'} gas) ⟹ Net benefit: $${netBenefitUsd.toFixed(2)}`;
+  const arithmeticExplanation = `Expected liquidation loss: $${expectedLossIfIdleUsd.toFixed(2)} (P_liq ${(pLiq * 100).toFixed(1)}% × ${(closeFactor * 100).toFixed(0)}% close factor × $${totalDebtUsd.toFixed(0)} debt × ${(bonusFraction * 100).toFixed(1)}% bonus) vs Intervention cost: $${expectedCostOfActionUsd.toFixed(2)} (all-in, includes $${candidate?.gasUsd.toFixed(2) ?? '0.00'} gas) ⟹ Net benefit: $${netBenefitUsd.toFixed(2)}`;
 
   // ==========================================
   // HARD OVERRIDES IN PRIORITY ORDER (§5)

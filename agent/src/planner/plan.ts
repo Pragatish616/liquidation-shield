@@ -42,8 +42,9 @@ export interface InterventionPlan {
   flashPremium: bigint;
   /** Encoded forward Uniswap v3 path for execution swap */
   swapPath: Hex;
-  /** Minimum debt amount out guaranteed from swap (enforced on-chain) */
-  minAmountOut: bigint;
+  /** Maximum collateral input the exact-output swap may spend (enforced
+   *  on-chain) -- a quote-derived ceiling, always <= releaseAmount */
+  maxAmountIn: bigint;
   /** Target Health Factor scaled by 1e18 (enforced on-chain) */
   targetHF: bigint;
   /** Expiration timestamp for transaction deadline (enforced on-chain) */
@@ -154,7 +155,7 @@ export async function generateInterventionPlan(
       flashAmount: 0n,
       flashPremium: 0n,
       swapPath: defaultHex,
-      minAmountOut: 0n,
+      maxAmountIn: 0n,
       targetHF: targetHFScaled,
       deadline,
       kappaBps: 0,
@@ -189,6 +190,7 @@ export async function generateInterventionPlan(
     position,
     candidate: selectionResult.bestCandidate,
     pLiq: options.pLiq,
+    liquidationBonus: selectionResult.bestCandidate?.collateral.liquidationBonus,
     policy: options.viabilityPolicy,
   });
 
@@ -211,7 +213,7 @@ export async function generateInterventionPlan(
       flashAmount: 0n,
       flashPremium: 0n,
       swapPath: defaultHex,
-      minAmountOut: 0n,
+      maxAmountIn: 0n,
       targetHF: targetHFScaled,
       deadline,
       kappaBps: 0,
@@ -245,7 +247,7 @@ export async function generateInterventionPlan(
     flashAmount: best.repayUnits,
     flashPremium: flashPremiumUnits,
     swapPath: best.quote.route.forwardPathHex,
-    minAmountOut: best.quote.minAmountOut,
+    maxAmountIn: best.maxAmountIn,
     targetHF: targetHFScaled,
     deadline,
     kappaBps: best.kappaBps,

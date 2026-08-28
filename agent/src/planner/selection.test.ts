@@ -295,7 +295,7 @@ describe('Collateral & Debt Selection Engine (selection.ts)', () => {
       gasParams: { baseFeeGwei: 0 },
     };
 
-    it('re-quotes for the clamped amount so minAmountOut stays consistent with the actual repay amount', async () => {
+    it('re-quotes for the clamped amount so maxAmountIn stays consistent with the actual release amount', async () => {
       const weth = collaterals.find((c) => c.symbol === 'WETH')!;
 
       const candidate = await evaluatePairCandidate(
@@ -313,11 +313,15 @@ describe('Collateral & Debt Selection Engine (selection.ts)', () => {
       expect(candidate.clampedReleaseUsd).toBeCloseTo(500, 2);
       expect(candidate.reachesTargetHF).toBe(false);
 
-      // The critical on-chain-safety invariant: the swap's guaranteed
-      // minimum output must never exceed the amount we're actually asking
-      // the flash-loan repayment to use, or the transaction cannot succeed.
+      // The critical on-chain-safety invariant: the swap's spend ceiling
+      // must never exceed the collateral we're actually releasing, or the
+      // transaction cannot be authorized. (candidate.repayUnits >=
+      // quote.minAmountOut would be true by construction here regardless of
+      // whether maxAmountIn is sane -- minAmountOut is quote.amountOut
+      // scaled DOWN, and quote.amountOut is repayUnits itself for an
+      // exact-output quote, so that comparison can never catch a real bug.)
       expect(candidate.quote).not.toBeNull();
-      expect(candidate.repayUnits).toBeGreaterThanOrEqual(candidate.quote!.minAmountOut);
+      expect(candidate.maxAmountIn).toBeLessThanOrEqual(candidate.releaseUnits);
 
       // The quote's own target output should match the CLAMPED repay units,
       // proving it was re-derived for the actual amount rather than reused

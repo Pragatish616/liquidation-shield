@@ -78,7 +78,9 @@ export interface FixedPointResult {
   releaseUsd: number;
   /** Repayment amount in USD */
   repayUsd: number;
-  /** Total friction loss in USD (V * κ) */
+  /** Total friction loss in USD (V * κ). Already includes gas -- κ's own
+   *  gasFriction term folds it in (see nextKappa below) -- so callers must
+   *  never add gasUsd to this a second time. */
   capitalBurnedUsd: number;
   /** Total gas cost in USD */
   gasUsd: number;
@@ -236,7 +238,13 @@ export async function solveKappaFixedPoint(
       };
     }
 
-    // 4. Update kappa: flash fee + effective swap friction + gas friction
+    // 4. Update kappa: flash fee + effective swap friction + gas friction.
+    // gasFriction folds gas into kappa (and therefore into
+    // capitalBurnedUsd = releaseUsd * kappa below) -- downstream callers
+    // must treat capitalBurnedUsd as the all-in cost and never add gasUsd
+    // to it again (that was the double-counting bug: selection.ts's
+    // totalCostUsd and viability.ts's expectedCostOfActionUsd both used to
+    // do exactly that).
     const gasFriction = gasUsd / sizing.releaseUsd;
     const nextKappa = flashPremium + quote.effectiveCostFraction + gasFriction;
 

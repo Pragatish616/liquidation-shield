@@ -6,8 +6,9 @@ export interface SimulationInvariants {
   hfImproved: boolean;
   /** Resulting health factor reaches or exceeds targetHF setpoint */
   hfTargetMet: boolean;
-  /** Swap produced at least minAmountOut required by on-chain guard */
-  minAmountOutSatisfied: boolean;
+  /** The swap's maxAmountIn ceiling never exceeds the collateral actually
+   *  released -- otherwise the on-chain trade could never be authorized */
+  maxAmountInSatisfied: boolean;
 }
 
 export interface SimulationResult {
@@ -40,7 +41,7 @@ export interface SimulationResult {
  * lands within 0.5% (0.005) of the target setpoint (§7, §9 item 11, §10.6).
  *
  * Simulates the exact on-chain restructuring sequence and enforces the 3 invariants:
- *   1. amountOut >= minAmountOut
+ *   1. maxAmountIn <= releaseAmount
  *   2. healthFactorAfter >= targetHF (within float tolerance)
  *   3. healthFactorAfter > healthFactorBefore
  *
@@ -75,7 +76,7 @@ export function simulatePlanExecution(
       invariants: {
         hfImproved: false,
         hfTargetMet: false,
-        minAmountOutSatisfied: false,
+        maxAmountInSatisfied: false,
       },
       logs: [...logs, `Simulation skipped: Plan has verdict REFUSE (${plan.reasonCode ?? 'NO_FEASIBLE_ROUTE'}).`],
     };
@@ -83,7 +84,7 @@ export function simulatePlanExecution(
 
   let postA: number;
   let postD: number;
-  let minAmountOutSatisfied = true;
+  let maxAmountInSatisfied = true;
 
   if (plan.mode === 'EXTERNAL_REPAY') {
     // Mode A: Only debt changes
@@ -117,7 +118,7 @@ export function simulatePlanExecution(
     postA = Math.max(0, position.totalRiskWeightedCollateralUsd - releasedRiskWeighted);
     postD = Math.max(0, position.totalDebtUsd - repayUsd);
 
-    minAmountOutSatisfied = plan.repayAmount >= plan.minAmountOut;
+    maxAmountInSatisfied = plan.maxAmountIn <= plan.releaseAmount;
     logs.push(`Mode B Restructure: Released $${releaseUsd.toFixed(2)} ${collateralAsset?.symbol ?? 'col'}, Repaid $${repayUsd.toFixed(2)} ${debtAsset?.symbol ?? 'debt'}.`);
   }
 
@@ -132,14 +133,14 @@ export function simulatePlanExecution(
   const invariants: SimulationInvariants = {
     hfImproved,
     hfTargetMet,
-    minAmountOutSatisfied,
+    maxAmountInSatisfied,
   };
 
-  const success = withinTolerance && hfImproved && minAmountOutSatisfied;
+  const success = withinTolerance && hfImproved && maxAmountInSatisfied;
 
   logs.push(`Post Simulation: Debt $${postD.toFixed(2)}, Collateral A $${postA.toFixed(2)}, Resulting HF: ${postHF.toFixed(4)}`);
   logs.push(`Target Accuracy: Relative Error ${(hfRelativeError * 100).toFixed(3)}% (Tolerance ${(toleranceFraction * 100).toFixed(1)}%) -> ${withinTolerance ? 'PASSED' : 'FAILED'}`);
-  logs.push(`Invariants Check: [Improved: ${hfImproved}, Target Met: ${hfTargetMet}, MinOut Met: ${minAmountOutSatisfied}]`);
+  logs.push(`Invariants Check: [Improved: ${hfImproved}, Target Met: ${hfTargetMet}, MaxAmountIn Met: ${maxAmountInSatisfied}]`);
 
   return {
     success,

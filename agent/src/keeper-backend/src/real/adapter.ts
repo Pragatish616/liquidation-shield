@@ -34,6 +34,7 @@ function toCollateralAsset(leg: CollateralLeg, opts: AdapterOptions): Collateral
     balanceUsd: leg.valueUsd,
     approvalRemainingUsd,
     aTokenAddress: leg.aToken,
+    liquidationBonus: leg.liquidationBonusBps / 10_000,
   };
 }
 

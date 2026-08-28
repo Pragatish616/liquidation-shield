@@ -55,7 +55,10 @@ describe('Viability Gate & Overrides (viability.ts)', () => {
     releaseUnits: 587286666666666666n,
     clampedRepayUsd: 1743.36,
     repayUnits: 1743360000n,
-    capitalBurnedUsd: 18.50,
+    // capitalBurnedUsd is the all-in cost (kappa's gasFriction term already
+    // folds in the $26.25 gasUsd below -- $18.50 swap/flash friction +
+    // $26.25 gas = $44.75). gasUsd stays a separate field for display only.
+    capitalBurnedUsd: 44.75,
     kappa: 0.0105,
     kappaBps: 105,
     gasUsd: 26.25,
@@ -67,6 +70,7 @@ describe('Viability Gate & Overrides (viability.ts)', () => {
     isConstrained: false,
     limitingFactor: 'NONE',
     quote: null,
+    maxAmountIn: 587286666666666666n,
     reasons: ['Valid route quote'],
   };
 
@@ -89,7 +93,8 @@ describe('Viability Gate & Overrides (viability.ts)', () => {
       const smallCandidate: CandidateRouteEvaluation = {
         ...baseCandidate,
         clampedReleaseUsd: 100,
-        capitalBurnedUsd: 1.05,
+        // All-in: $1.05 swap/flash friction + $25.00 gas = $26.05.
+        capitalBurnedUsd: 26.05,
         gasUsd: 25.0, // High gas cost ($25) relative to position size
         totalCostUsd: 26.05,
       };
@@ -110,7 +115,8 @@ describe('Viability Gate & Overrides (viability.ts)', () => {
       // Expected loss: 0.40 * 1.0 (closeFactor for $300 dust) * 300 * 0.05 = $6.00
       expect(result.expectedLossIfIdleUsd).toBeCloseTo(6.00, 2);
 
-      // Expected cost: $1.05 friction + $25.00 gas = $26.05
+      // Expected cost: capitalBurnedUsd, already all-in ($1.05 friction +
+      // $25.00 gas = $26.05) -- must not be gasUsd added a second time.
       expect(result.expectedCostOfActionUsd).toBeCloseTo(26.05, 2);
 
       // Net benefit: $6.00 - $26.05 = -$20.05
@@ -131,7 +137,7 @@ describe('Viability Gate & Overrides (viability.ts)', () => {
       // Candidate with very high cost that would fail a normal net benefit check
       const expensiveCandidate: CandidateRouteEvaluation = {
         ...baseCandidate,
-        capitalBurnedUsd: 500,
+        capitalBurnedUsd: 600, // all-in: $500 friction + $100 gas
         gasUsd: 100,
         totalCostUsd: 600,
       };
@@ -212,7 +218,8 @@ describe('Viability Gate & Overrides (viability.ts)', () => {
       // Expected loss: 0.85 * 0.5 * 19000 * 0.05 = $403.75
       expect(result.expectedLossIfIdleUsd).toBeCloseTo(403.75, 2);
 
-      // Expected cost: $18.50 + $26.25 = $44.75
+      // Expected cost: capitalBurnedUsd, already all-in ($18.50 friction +
+      // $26.25 gas = $44.75) -- must not be gasUsd added a second time.
       expect(result.expectedCostOfActionUsd).toBeCloseTo(44.75, 2);
 
       // Net benefit: $403.75 - $44.75 = $359.00
