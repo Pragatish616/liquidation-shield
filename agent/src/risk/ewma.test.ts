@@ -75,4 +75,35 @@ describe('computeSigmaPerSec', () => {
     const debt: PricePoint[] = [1, 2].map((price, i) => ({ t: t0 + i, price }));
     expect(() => computeSigmaPerSec(collateral, debt)).toThrow();
   });
+
+  it('throws a clear error on same-length but misaligned timestamps', () => {
+    const t0 = 1_700_000_000;
+    const step = 3600;
+    const collateral: PricePoint[] = [3000, 3050, 3010, 3120, 3080].map((price, i) => ({
+      t: t0 + i * step,
+      price,
+    }));
+    // debt series has the same length but its 3rd timestamp (index 2) is off by one second
+    const debt: PricePoint[] = [1, 1, 1, 1, 1].map((price, i) => ({
+      t: t0 + i * step + (i === 2 ? 1 : 0),
+      price,
+    }));
+
+    expect(() => computeSigmaPerSec(collateral, debt)).toThrow(/index 2/);
+    expect(() => computeSigmaPerSec(collateral, debt)).toThrow(
+      new RegExp(`collateral.t=${t0 + 2 * step}.*debt.t=${t0 + 2 * step + 1}`),
+    );
+  });
+
+  it('does not throw when timestamps are well-aligned', () => {
+    const t0 = 1_700_000_000;
+    const step = 3600;
+    const collateral: PricePoint[] = [3000, 3050, 3010, 3120, 3080].map((price, i) => ({
+      t: t0 + i * step,
+      price,
+    }));
+    const debt: PricePoint[] = [1, 1, 1, 1, 1].map((price, i) => ({ t: t0 + i * step, price }));
+
+    expect(() => computeSigmaPerSec(collateral, debt, 0.9)).not.toThrow();
+  });
 });

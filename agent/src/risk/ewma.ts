@@ -44,6 +44,14 @@ function ratioSeries(collateral: PricePoint[], debt: PricePoint[]): number[] {
       `collateral/debt price series length mismatch: ${collateral.length} vs ${debt.length}`,
     );
   }
+  for (let i = 0; i < collateral.length; i++) {
+    if (collateral[i].t !== debt[i].t) {
+      throw new Error(
+        `collateral/debt price series misaligned at index ${i}: ` +
+          `collateral.t=${collateral[i].t} vs debt.t=${debt[i].t}`,
+      );
+    }
+  }
   return collateral.map((c, i) => c.price / debt[i].price);
 }
 
