@@ -12,12 +12,11 @@ contract UniV3Swapper is ISwapper {
         SWAP_ROUTER = _router;
     }
 
-    function swapExactOutput(
-        bytes calldata path,
-        uint256 amountOut,
-        uint256 maxAmountIn,
-        uint256 deadline
-    ) external override returns (uint256 amountIn) {
+    function swapExactOutput(bytes calldata path, uint256 amountOut, uint256 maxAmountIn, uint256 deadline)
+        external
+        override
+        returns (uint256 amountIn)
+    {
         address tokenIn = address(uint160(bytes20(path[0:20])));
         address tokenOut = address(uint160(bytes20(path[path.length - 20:])));
 
@@ -38,12 +37,11 @@ contract UniV3Swapper is ISwapper {
         return amountIn;
     }
 
-    function swapExactInput(
-        bytes calldata path,
-        uint256 amountIn,
-        uint256 minAmountOut,
-        uint256 deadline
-    ) external override returns (uint256 amountOut) {
+    function swapExactInput(bytes calldata path, uint256 amountIn, uint256 minAmountOut, uint256 deadline)
+        external
+        override
+        returns (uint256 amountOut)
+    {
         address tokenIn = address(uint160(bytes20(path[0:20])));
         address tokenOut = address(uint160(bytes20(path[path.length - 20:])));
 

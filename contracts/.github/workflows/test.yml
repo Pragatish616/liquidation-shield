@@ -13,6 +13,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      # Consumed by foundry.toml's [rpc_endpoints] mainnet entry -- the
+      # fork test (test/LiquidationShieldFork.t.sol) needs a real mainnet
+      # RPC to fork from. Set as a repo/org secret.
+      MAINNET_RPC: ${{ secrets.MAINNET_RPC }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -31,5 +36,18 @@ jobs:
       - name: Run Forge build
         run: forge build --sizes
 
+      # `forge test` exits 0 on an empty suite -- that's how this repo ran
+      # a "passing" CI badge over zero test coverage for as long as
+      # contracts/test/ was empty. Fail explicitly before trusting the
+      # test step's own exit code.
+      - name: Guard against an empty test suite
+        run: |
+          COUNT=$(forge test --list --json 2>/dev/null | jq '[.[] | to_entries[]? | .value[]?] | length')
+          echo "Discovered $COUNT test function(s)."
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::No test functions found -- an empty suite must not pass CI silently."
+            exit 1
+          fi
+
       - name: Run Forge tests
-        run: forge test -vvv
+        run: forge test -vvv --fail-fast

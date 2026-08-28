@@ -6,12 +6,12 @@ interface IPolicyRegistry {
         uint128 triggerHF;
         uint128 targetHF;
         uint128 maxReleasePerTx;
-        uint32  maxCostBps;
-        uint32  minIntervalSec;
-        uint64  expiry;
+        uint32 maxCostBps;
+        uint32 minIntervalSec;
+        uint64 expiry;
         address[] allowedCollateral;
         address[] allowedDebt;
-        bool    enabled;
+        bool enabled;
     }
 
     function setPolicy(Policy calldata p) external;
@@ -20,10 +20,8 @@ interface IPolicyRegistry {
     function lastExecutedAt(address user) external view returns (uint64);
     function setLastExecutedAt(address user, uint64 timestamp) external;
     function isKeeper(address account) external view returns (bool);
-    function validatePolicy(
-        address user,
-        address collateralAsset,
-        address debtAsset,
-        uint256 releaseAmount
-    ) external view returns (Policy memory);
+    function validatePolicy(address user, address collateralAsset, address debtAsset, uint256 releaseAmount)
+        external
+        view
+        returns (Policy memory);
 }

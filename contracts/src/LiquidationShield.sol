@@ -3,13 +3,14 @@ pragma solidity ^0.8.24;
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
 import {IFlashProvider} from "./interfaces/IFlashProvider.sol";
 import {ISwapper} from "./interfaces/ISwapper.sol";
 import {IPolicyRegistry} from "./interfaces/IPolicyRegistry.sol";
 import {IIntervention} from "./interfaces/IIntervention.sol";
-import {MockPool} from "./mocks/MockPool.sol";
-import {MockAToken} from "./mocks/MockAToken.sol";
-import {MockERC20} from "./mocks/MockERC20.sol";
+import {IPoolLike} from "./interfaces/IPoolLike.sol";
+import {IPriceOracleLike} from "./interfaces/IPriceOracleLike.sol";
+import {AaveAdapter} from "./libraries/AaveAdapter.sol";
 import {HealthMath} from "./libraries/HealthMath.sol";
 import "./libraries/Errors.sol";
 
@@ -21,7 +22,8 @@ contract LiquidationShield is ReentrancyGuard {
     IFlashProvider public immutable FLASH_PROVIDER;
     ISwapper public immutable SWAPPER;
     IPolicyRegistry public immutable POLICY_REGISTRY;
-    MockPool public immutable POOL;
+    IPoolLike public immutable POOL;
+    IPriceOracleLike public immutable ORACLE;
 
     // Transient commitment binding a flash loan callback to the exact params
     // executeIntervention just initiated it with -- see executeOperation.
@@ -42,16 +44,12 @@ contract LiquidationShield is ReentrancyGuard {
         _operationEntered = false;
     }
 
-    constructor(
-        address flashProvider,
-        address swapper,
-        address policyRegistry,
-        address pool
-    ) {
+    constructor(address flashProvider, address swapper, address policyRegistry, address pool, address oracle) {
         FLASH_PROVIDER = IFlashProvider(flashProvider);
         SWAPPER = ISwapper(swapper);
         POLICY_REGISTRY = IPolicyRegistry(policyRegistry);
-        POOL = MockPool(pool);
+        POOL = IPoolLike(pool);
+        ORACLE = IPriceOracleLike(oracle);
     }
 
     // ============ ENTRY POINT ============
@@ -64,30 +62,20 @@ contract LiquidationShield is ReentrancyGuard {
         if (!POLICY_REGISTRY.isKeeper(msg.sender)) revert UnauthorizedKeeper();
 
         // 3. Validate policy & get it
-        IPolicyRegistry.Policy memory policy = POLICY_REGISTRY.validatePolicy(
-            params.user,
-            params.collateralAsset,
-            params.debtAsset,
-            params.releaseAmount
-        );
+        IPolicyRegistry.Policy memory policy =
+            POLICY_REGISTRY.validatePolicy(params.user, params.collateralAsset, params.debtAsset, params.releaseAmount);
 
         // 4. Check position is actually at risk
         uint256 hfBefore = HealthMath.getHealthFactor(params.user, POOL);
         if (hfBefore != 0 && hfBefore >= policy.triggerHF) revert NotAtRisk();
 
         // 5. Snapshot user state for post-execution verification
-        (uint256 debtBefore,) = _snapshotUserState(params);
+        uint256 debtBefore = _snapshotUserDebt(params);
 
         // 6. Execute flash loan (calls back into executeOperation)
         bytes memory flashParams = abi.encode(params, hfBefore);
         _pendingParamsHash = keccak256(flashParams);
-        FLASH_PROVIDER.flashLoanSimple(
-            address(this),
-            params.debtAsset,
-            params.repayAmount,
-            flashParams,
-            0
-        );
+        FLASH_PROVIDER.flashLoanSimple(address(this), params.debtAsset, params.repayAmount, flashParams, 0);
         _pendingParamsHash = bytes32(0);
 
         // ============ POST-FLASH INVARIANTS ============
@@ -125,13 +113,11 @@ contract LiquidationShield is ReentrancyGuard {
 
     // ============ FLASH LOAN CALLBACK ============
 
-    function executeOperation(
-        address asset,
-        uint256 amount,
-        uint256 premium,
-        address initiator,
-        bytes calldata params
-    ) external nonReentrantOperation returns (bool) {
+    function executeOperation(address asset, uint256 amount, uint256 premium, address initiator, bytes calldata params)
+        external
+        nonReentrantOperation
+        returns (bool)
+    {
         // Security: Only the Pool/FlashProvider can call this, and only from our own flash loan
         if (msg.sender != address(POOL) && msg.sender != address(FLASH_PROVIDER)) revert OnlyPool();
         // The real gate: this callback must carry the exact params
@@ -153,19 +139,12 @@ contract LiquidationShield is ReentrancyGuard {
         POOL.repay(p.debtAsset, amount, 2, p.user); // 2 = variable rate
 
         // ============ STEP 2: PERMIT + PULL aTOKENS ============
-        address aToken = POOL.aTokenFor(p.collateralAsset);
+        address aToken = AaveAdapter.aTokenOf(POOL, p.collateralAsset);
         if (aToken == address(0)) aToken = p.collateralAsset;
 
         if (p.permit.deadline != 0) {
-            MockAToken(aToken).permit(
-                p.user,
-                address(this),
-                p.permit.value,
-                p.permit.deadline,
-                p.permit.v,
-                p.permit.r,
-                p.permit.s
-            );
+            IERC20Permit(aToken)
+                .permit(p.user, address(this), p.permit.value, p.permit.deadline, p.permit.v, p.permit.r, p.permit.s);
         }
         // Pull aTokens from user
         IERC20(aToken).transferFrom(p.user, address(this), p.releaseAmount);
@@ -199,12 +178,12 @@ contract LiquidationShield is ReentrancyGuard {
 
     // ============ INTERNAL HELPERS ============
 
-    function _snapshotUserState(IIntervention.InterventionParams calldata p) internal view returns (uint256, uint256) {
-        return (POOL.userDebt(p.user, p.debtAsset), POOL.userCollateral(p.user, p.collateralAsset));
+    function _snapshotUserDebt(IIntervention.InterventionParams calldata p) internal view returns (uint256) {
+        return AaveAdapter.debtOf(POOL, p.debtAsset, p.user);
     }
 
     function _assertNoNewDebt(IIntervention.InterventionParams calldata p, uint256 debtBefore) internal view {
-        uint256 debtAfter = POOL.userDebt(p.user, p.debtAsset);
+        uint256 debtAfter = AaveAdapter.debtOf(POOL, p.debtAsset, p.user);
         if (debtAfter >= debtBefore) revert NewDebtOpened();
     }
 
@@ -217,7 +196,10 @@ contract LiquidationShield is ReentrancyGuard {
         }
     }
 
-    function _assertCostWithinLimit(IIntervention.InterventionParams calldata p, IPolicyRegistry.Policy memory policy) internal view {
+    function _assertCostWithinLimit(IIntervention.InterventionParams calldata p, IPolicyRegistry.Policy memory policy)
+        internal
+        view
+    {
         uint256 costBps = _computeCostBps(p);
         if (costBps > policy.maxCostBps) revert TooExpensive();
     }
@@ -225,7 +207,8 @@ contract LiquidationShield is ReentrancyGuard {
     function _computeCostBps(IIntervention.InterventionParams calldata p) internal view returns (uint256) {
         // Compute cost BPS based on flash loan premium (owed vs repaid)
         uint256 premiumUsd = (p.repayAmount * 5) / 10000; // 5 BPS flash loan premium
-        uint256 repayValueUsd = p.repayAmount * POOL.assetPriceUsd(p.debtAsset) / (10 ** IERC20Metadata(p.debtAsset).decimals());
+        uint256 repayValueUsd =
+            p.repayAmount * ORACLE.getAssetPrice(p.debtAsset) / (10 ** IERC20Metadata(p.debtAsset).decimals());
 
         if (repayValueUsd == 0) return 0;
         return (premiumUsd * 10000) / p.repayAmount;

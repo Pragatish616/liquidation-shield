@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IFlashProvider} from "../interfaces/IFlashProvider.sol";
-import {MockPool} from "../mocks/MockPool.sol";
+import {IPoolLike} from "../interfaces/IPoolLike.sol";
 import "../libraries/Errors.sol";
 
 contract AaveFlashProvider is IFlashProvider {
@@ -33,7 +33,6 @@ contract AaveFlashProvider is IFlashProvider {
         uint16 referralCode
     ) external override {
         if (msg.sender != shield) revert OnlyShield();
-        // Call the mock pool's flashLoanSimple
-        MockPool(POOL).flashLoanSimple(receiver, asset, amount, params, referralCode);
+        IPoolLike(POOL).flashLoanSimple(receiver, asset, amount, params, referralCode);
     }
 }

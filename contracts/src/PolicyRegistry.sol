@@ -63,25 +63,31 @@ contract PolicyRegistry is Ownable, IPolicyRegistry {
         lastExecutedAt[user] = timestamp;
     }
 
-    function validatePolicy(
-        address user,
-        address collateralAsset,
-        address debtAsset,
-        uint256 releaseAmount
-    ) external view override returns (Policy memory) {
+    function validatePolicy(address user, address collateralAsset, address debtAsset, uint256 releaseAmount)
+        external
+        view
+        override
+        returns (Policy memory)
+    {
         Policy memory p = _policies[user];
         if (!p.enabled) revert PolicyDisabled();
         if (block.timestamp > p.expiry) revert PolicyExpired();
 
         bool collateralOk = false;
-        for (uint i = 0; i < p.allowedCollateral.length; i++) {
-            if (p.allowedCollateral[i] == collateralAsset) { collateralOk = true; break; }
+        for (uint256 i = 0; i < p.allowedCollateral.length; i++) {
+            if (p.allowedCollateral[i] == collateralAsset) {
+                collateralOk = true;
+                break;
+            }
         }
         if (!collateralOk) revert AssetNotAllowed();
 
         bool debtOk = false;
-        for (uint i = 0; i < p.allowedDebt.length; i++) {
-            if (p.allowedDebt[i] == debtAsset) { debtOk = true; break; }
+        for (uint256 i = 0; i < p.allowedDebt.length; i++) {
+            if (p.allowedDebt[i] == debtAsset) {
+                debtOk = true;
+                break;
+            }
         }
         if (!debtOk) revert AssetNotAllowed();
 

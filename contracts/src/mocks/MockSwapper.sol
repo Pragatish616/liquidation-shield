@@ -21,12 +21,11 @@ contract MockSwapper is ISwapper {
         swapRate[keccak256(abi.encodePacked(tokenIn, tokenOut))] = rate;
     }
 
-    function swapExactOutput(
-        bytes calldata path,
-        uint256 amountOut,
-        uint256 maxAmountIn,
-        uint256 deadline
-    ) external override returns (uint256 amountIn) {
+    function swapExactOutput(bytes calldata path, uint256 amountOut, uint256 maxAmountIn, uint256 deadline)
+        external
+        override
+        returns (uint256 amountIn)
+    {
         lastPath = path;
         lastAmountOut = amountOut;
 
@@ -46,12 +45,11 @@ contract MockSwapper is ISwapper {
         return amountIn;
     }
 
-    function swapExactInput(
-        bytes calldata path,
-        uint256 amountIn,
-        uint256 minAmountOut,
-        uint256 deadline
-    ) external override returns (uint256 amountOut) {
+    function swapExactInput(bytes calldata path, uint256 amountIn, uint256 minAmountOut, uint256 deadline)
+        external
+        override
+        returns (uint256 amountOut)
+    {
         lastPath = path;
         lastAmountIn = amountIn;
 

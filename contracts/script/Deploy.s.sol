@@ -8,6 +8,7 @@ import {UniV3Swapper} from "../src/adapters/UniV3Swapper.sol";
 import {MockPool} from "../src/mocks/MockPool.sol";
 import {MockERC20} from "../src/mocks/MockERC20.sol";
 import {MockAToken} from "../src/mocks/MockAToken.sol";
+import {MockDebtToken} from "../src/mocks/MockDebtToken.sol";
 import {MockSwapper} from "../src/mocks/MockSwapper.sol";
 import {LiquidationShield} from "../src/LiquidationShield.sol";
 import {console} from "forge-std/console.sol";
@@ -36,6 +37,19 @@ contract Deploy is Script {
         pool.registerAToken(address(weth), address(aWeth));
         pool.registerAToken(address(usdc), address(aUsdc));
 
+        // === Deploy Mock Variable Debt Tokens ===
+        // Real Aave exposes a user's debt via a per-reserve variable debt
+        // token's balanceOf, not a pool method (see AaveAdapter.debtOf) --
+        // these are thin read-through proxies onto MockPool's own userDebt
+        // mapping, mirroring how aTokens already work above.
+        MockDebtToken debtWeth = new MockDebtToken(address(pool), address(weth));
+        MockDebtToken debtUsdc = new MockDebtToken(address(pool), address(usdc));
+        console.log("debtWETH:", address(debtWeth));
+        console.log("debtUSDC:", address(debtUsdc));
+
+        pool.registerDebtToken(address(weth), address(debtWeth));
+        pool.registerDebtToken(address(usdc), address(debtUsdc));
+
         // === Deploy Mock Swapper ===
         MockSwapper mockSwapper = new MockSwapper();
         console.log("MockSwapper:", address(mockSwapper));
@@ -52,11 +66,10 @@ contract Deploy is Script {
         console.log("PolicyRegistry:", address(registry));
 
         // === Deploy LiquidationShield ===
+        // MockPool doubles as its own price oracle for this mock/demo
+        // deployment -- see MockPool.getAssetPrice.
         LiquidationShield shield = new LiquidationShield(
-            address(flashProvider),
-            address(swapper),
-            address(registry),
-            address(pool)
+            address(flashProvider), address(swapper), address(registry), address(pool), address(pool)
         );
         console.log("LiquidationShield:", address(shield));
 
@@ -78,16 +91,36 @@ contract Deploy is Script {
             "addresses.json",
             string(
                 abi.encodePacked(
-                    '{"weth":"', vm.toString(address(weth)), '",',
-                    '"usdc":"', vm.toString(address(usdc)), '",',
-                    '"pool":"', vm.toString(address(pool)), '",',
-                    '"aWeth":"', vm.toString(address(aWeth)), '",',
-                    '"aUsdc":"', vm.toString(address(aUsdc)), '",',
-                    '"mockSwapper":"', vm.toString(address(mockSwapper)), '",',
-                    '"flashProvider":"', vm.toString(address(flashProvider)), '",',
-                    '"swapper":"', vm.toString(address(swapper)), '",',
-                    '"registry":"', vm.toString(address(registry)), '",',
-                    '"shield":"', vm.toString(address(shield)), '"}'
+                    '{"weth":"',
+                    vm.toString(address(weth)),
+                    '",',
+                    '"usdc":"',
+                    vm.toString(address(usdc)),
+                    '",',
+                    '"pool":"',
+                    vm.toString(address(pool)),
+                    '",',
+                    '"aWeth":"',
+                    vm.toString(address(aWeth)),
+                    '",',
+                    '"aUsdc":"',
+                    vm.toString(address(aUsdc)),
+                    '",',
+                    '"mockSwapper":"',
+                    vm.toString(address(mockSwapper)),
+                    '",',
+                    '"flashProvider":"',
+                    vm.toString(address(flashProvider)),
+                    '",',
+                    '"swapper":"',
+                    vm.toString(address(swapper)),
+                    '",',
+                    '"registry":"',
+                    vm.toString(address(registry)),
+                    '",',
+                    '"shield":"',
+                    vm.toString(address(shield)),
+                    '"}'
                 )
             )
         );
