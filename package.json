@@ -1,7 +1,7 @@
 {
   "name": "liquidation-shield",
   "version": "1.0.0",
-  "description": "",
+  "description": "Closed-loop control system that protects leveraged Aave v3 positions from liquidation.",
   "main": "index.js",
   "scripts": {
     "fork": "bash scripts/fork.sh",
@@ -15,9 +15,9 @@
     "demo:refuse": "node --experimental-strip-types scripts/scenarios/02-refuse.ts",
     "demo:real": "tsx scripts/scenarios/03-real.ts"
   },
-  "keywords": [],
+  "keywords": ["aave", "defi", "liquidation", "flash-loan", "ethereum"],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "devEngines": {
     "packageManager": {
       "name": "pnpm",
