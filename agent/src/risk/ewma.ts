@@ -17,7 +17,8 @@ export function asSigmaPerSec(n: number): SigmaPerSec {
 export function logReturns(series: number[]): number[] {
   const out: number[] = [];
   for (let i = 1; i < series.length; i++) {
-    out.push(Math.log(series[i] / series[i - 1]));
+    // i and i-1 are always in [0, series.length) given the loop bounds.
+    out.push(Math.log(series[i]! / series[i - 1]!));
   }
   return out;
 }
@@ -28,9 +29,10 @@ export function logReturns(series: number[]): number[] {
  */
 export function ewmaVariance(returns: number[], lambda: number): number {
   if (returns.length === 0) return 0;
-  let variance = returns[0] * returns[0];
+  let variance = returns[0]! * returns[0]!;
   for (let i = 1; i < returns.length; i++) {
-    variance = lambda * variance + (1 - lambda) * returns[i] * returns[i];
+    // i is always in [1, returns.length) given the loop bounds.
+    variance = lambda * variance + (1 - lambda) * returns[i]! * returns[i]!;
   }
   return variance;
 }
@@ -52,21 +54,25 @@ function ratioSeries(collateral: PricePoint[], debt: PricePoint[]): number[] {
     );
   }
   for (let i = 0; i < collateral.length; i++) {
-    if (collateral[i].t !== debt[i].t) {
+    // i is always in [0, collateral.length) = [0, debt.length) given the loop bounds.
+    const c = collateral[i]!;
+    const d = debt[i]!;
+    if (c.t !== d.t) {
       throw new Error(
         `collateral/debt price series misaligned at index ${i}: ` +
-          `collateral.t=${collateral[i].t} vs debt.t=${debt[i].t}`,
+          `collateral.t=${c.t} vs debt.t=${d.t}`,
       );
     }
   }
-  return collateral.map((c, i) => c.price / debt[i].price);
+  return collateral.map((c, i) => c.price / debt[i]!.price);
 }
 
+/** Callers must pass at least 2 points; computeSigmaPerSec enforces >= 3. */
 function medianSampleIntervalSec(points: PricePoint[]): number {
   const intervals: number[] = [];
-  for (let i = 1; i < points.length; i++) intervals.push(points[i].t - points[i - 1].t);
+  for (let i = 1; i < points.length; i++) intervals.push(points[i]!.t - points[i - 1]!.t);
   intervals.sort((a, b) => a - b);
-  return intervals[Math.floor(intervals.length / 2)];
+  return intervals[Math.floor(intervals.length / 2)]!;
 }
 
 /**
