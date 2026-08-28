@@ -12,10 +12,30 @@
 
 import type { Address } from 'viem';
 import { assess } from '../../../risk/assess.ts';
-import { generateInterventionPlan, SimulatedQuoter } from '../../../planner/index.ts';
+import {
+  generateInterventionPlan,
+  SimulatedQuoter,
+  type InterventionPlan,
+  type UserPosition,
+} from '../../../planner/index.ts';
 import { snapshotToUserPosition, type AdapterOptions } from './adapter.ts';
 import { appendDecision, readDecisions } from '../keeper/store.ts';
 import { executeMock } from '../executor/executor.ts';
+
+// InterventionPlan's own releaseAmount/repayAmount are raw token units, not
+// USD -- for DELEVERAGE mode the winning candidate's clamped*Usd fields
+// (already in USD) are the direct source; for EXTERNAL_REPAY there's no
+// ranked candidate at all (see plan.ts), so repayUsd is derived the same
+// way simulate.ts does it, from the debt asset's own price/decimals.
+function planAmountsUsd(plan: InterventionPlan, position: UserPosition): { releaseUsd: number; repayUsd: number } {
+  if (plan.mode === 'DELEVERAGE') {
+    const best = plan.ranking.find((c) => c.rank === 1);
+    return { releaseUsd: best?.clampedReleaseUsd ?? 0, repayUsd: best?.clampedRepayUsd ?? 0 };
+  }
+  const debtAsset = position.debts.find((d) => d.address.toLowerCase() === plan.debtAsset.toLowerCase());
+  const repayUsd = debtAsset ? (Number(plan.repayAmount) / 10 ** debtAsset.decimals) * debtAsset.priceUsd : 0;
+  return { releaseUsd: 0, repayUsd };
+}
 
 export interface RealKeeperOptions {
   user: Address;
@@ -49,7 +69,11 @@ export async function realTickOnce(opts: RealKeeperOptions): Promise<void> {
     kind: 'assess',
     hf,
     targetHF: assessment.targetHF,
+    triggerHF: assessment.triggerHF,
     pLiq: assessment.pLiq,
+    pLiq24h: assessment.pLiq24h,
+    urgency: assessment.urgency,
+    reasons: assessment.reasons,
   });
 
   if (isRealTickInFlight(userId)) {
@@ -93,6 +117,9 @@ export async function realTickOnce(opts: RealKeeperOptions): Promise<void> {
       kind: 'plan',
       hf,
       targetHF: assessment.targetHF,
+      verdict: plan.verdict,
+      mode: plan.mode,
+      reasons: plan.reasons,
     });
     appendDecision(opts.logPath, {
       ts: Date.now(),
@@ -101,7 +128,13 @@ export async function realTickOnce(opts: RealKeeperOptions): Promise<void> {
       hf,
       targetHF: assessment.targetHF,
       expectedLossNoAction: plan.expectedLossIfIdleUsd,
-      expectedLossAction: plan.capitalBurnedUsd + plan.gasUsd,
+      // capitalBurnedUsd is already all-in (kappa's own gasFriction term
+      // folds gas in -- see costModel.ts) -- adding plan.gasUsd here would
+      // double-count it, same bug already fixed in selection.ts/viability.ts.
+      expectedLossAction: plan.capitalBurnedUsd,
+      verdict: plan.verdict,
+      mode: plan.mode,
+      reasons: plan.reasons,
       reason: plan.reasons[0] ?? plan.reasonCode ?? 'not viable',
     });
     return;
@@ -111,6 +144,7 @@ export async function realTickOnce(opts: RealKeeperOptions): Promise<void> {
     plan.mode === 'DELEVERAGE'
       ? plan.ranking.find((c) => c.rank === 1)?.collateral.symbol
       : 'EXTERNAL_REPAY';
+  const { releaseUsd, repayUsd } = planAmountsUsd(plan, position);
 
   appendDecision(opts.logPath, {
     ts: Date.now(),
@@ -119,7 +153,12 @@ export async function realTickOnce(opts: RealKeeperOptions): Promise<void> {
     hf,
     targetHF: assessment.targetHF,
     chosenSymbol,
+    releaseUsd,
+    repayUsd,
     capitalBurned: plan.capitalBurnedUsd,
+    verdict: plan.verdict,
+    mode: plan.mode,
+    reasons: plan.reasons,
   });
 
   inFlightLock.add(userId);
@@ -140,7 +179,12 @@ export async function realTickOnce(opts: RealKeeperOptions): Promise<void> {
       hf,
       targetHF: assessment.targetHF,
       chosenSymbol,
+      releaseUsd,
+      repayUsd,
       capitalBurned: plan.capitalBurnedUsd,
+      verdict: plan.verdict,
+      mode: plan.mode,
+      reasons: plan.reasons,
       txHash: receipt.txHash,
     });
   } catch (err) {
@@ -150,6 +194,9 @@ export async function realTickOnce(opts: RealKeeperOptions): Promise<void> {
       kind: 'simulate_fail',
       hf,
       targetHF: assessment.targetHF,
+      verdict: plan.verdict,
+      mode: plan.mode,
+      reasons: plan.reasons,
       reason: err instanceof Error ? err.message : String(err),
     });
   } finally {

@@ -69,6 +69,7 @@ export async function tickOnce(opts: KeeperOptions): Promise<void> {
 
   // 4. Run planner
   const planRes = planPosition(pos, opts.targetHF, opts.pLiq, opts.gasUsd, opts.debtSymbol);
+  const reasons = planRes.reason ? [planRes.reason] : undefined;
 
   if (planRes.mode === 'HOLD' || !planRes.chosen) {
     appendDecision(opts.logPath, {
@@ -77,6 +78,9 @@ export async function tickOnce(opts: KeeperOptions): Promise<void> {
       kind: 'plan',
       hf,
       targetHF: opts.targetHF,
+      verdict: 'HOLD',
+      mode: planRes.mode,
+      reasons,
     });
     appendDecision(opts.logPath, {
       ts: Date.now(),
@@ -84,6 +88,9 @@ export async function tickOnce(opts: KeeperOptions): Promise<void> {
       kind: 'refuse',
       hf,
       targetHF: opts.targetHF,
+      verdict: 'HOLD',
+      mode: planRes.mode,
+      reasons,
       reason: planRes.reason ?? 'intervention cost exceeds expected loss',
     });
     return;
@@ -98,7 +105,12 @@ export async function tickOnce(opts: KeeperOptions): Promise<void> {
     hf,
     targetHF: opts.targetHF,
     chosenSymbol: chosen.symbol,
+    releaseUsd: chosen.V,
+    repayUsd: chosen.R,
     capitalBurned: chosen.capitalBurned,
+    verdict: 'EXECUTE',
+    mode: planRes.mode,
+    reasons,
   });
 
   inFlightLock.add(opts.userId);
@@ -121,7 +133,12 @@ export async function tickOnce(opts: KeeperOptions): Promise<void> {
       hf,
       targetHF: opts.targetHF,
       chosenSymbol: chosen.symbol,
+      releaseUsd: chosen.V,
+      repayUsd: chosen.R,
       capitalBurned: chosen.capitalBurned,
+      verdict: 'EXECUTE',
+      mode: planRes.mode,
+      reasons,
       txHash: receipt.txHash,
     });
   } finally {

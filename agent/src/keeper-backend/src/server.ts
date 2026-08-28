@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
-import { readDecisions } from './keeper/store.ts';
+import { readDecisions, type DecisionRecord } from './keeper/store.ts';
 import { tickOnce, type KeeperOptions } from './keeper/loop.ts';
 import { healthFactor } from './health.ts';
 import { makeMultiCollateral } from './mock/position.ts';
@@ -11,6 +11,10 @@ const PORT = Number(process.env.PORT ?? 8080);
 const TICK_INTERVAL_MS = Number(process.env.TICK_INTERVAL_MS ?? 15000);
 const LOG_PATH = resolve(process.env.LOG_PATH ?? 'decision-real.log.json');
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN ?? '*';
+// Guards /api/status only -- unset means the endpoint fails closed (every
+// request 401s, never fails open), since there's no configured token to
+// ever match against. /api/decisions and /health stay unauthenticated.
+const AGENT_API_TOKEN = process.env.AGENT_API_TOKEN;
 const USER_ID = 'live-keeper';
 
 let mode: 'mock' | 'real' = 'mock';
@@ -19,6 +23,65 @@ let lastTickAt: number | null = null;
 let lastTickOk: boolean | null = null;
 let lastError: string | null = null;
 const startedAt = Date.now();
+
+// Flat, single-object summary for a voice agent to read aloud -- not the
+// full record array /api/decisions returns. Merges the latest 'assess'
+// record (hf/triggerHF/pLiq/pLiq24h/urgency, which only assess records
+// carry) with the latest record overall for this user (verdict/mode/
+// chosenSymbol/releaseUsd/repayUsd/reasons, which only land on the
+// terminal plan/refuse/execute/simulate_fail record of a tick). In the
+// common case these are the same tick, since ticks run one at a time
+// (isRealTickInFlight / the mock path's own lock) and each fully
+// completes its assess -> ... -> terminal sequence before the next starts.
+function deriveStatus(records: DecisionRecord[]) {
+  const empty = {
+    hf: null,
+    targetHF: null,
+    triggerHF: null,
+    pLiq: null,
+    pLiq24h: null,
+    urgency: null,
+    chosenSymbol: null,
+    releaseUsd: null,
+    repayUsd: null,
+    capitalBurned: null,
+    verdict: null,
+    reason: null,
+    reasons: [] as string[],
+    mode: null,
+    lastTickAt,
+  };
+  if (records.length === 0) return empty;
+
+  const currentUserId = records[records.length - 1]!.userId;
+  const mine = records.filter((r) => r.userId === currentUserId);
+  const last = mine[mine.length - 1]!;
+  let lastAssess: DecisionRecord | undefined;
+  for (let i = mine.length - 1; i >= 0; i--) {
+    if (mine[i]!.kind === 'assess') {
+      lastAssess = mine[i];
+      break;
+    }
+  }
+
+  return {
+    hf: last.hf ?? lastAssess?.hf ?? null,
+    targetHF: last.targetHF ?? lastAssess?.targetHF ?? null,
+    triggerHF: lastAssess?.triggerHF ?? null,
+    pLiq: lastAssess?.pLiq ?? null,
+    pLiq24h: lastAssess?.pLiq24h ?? null,
+    urgency: lastAssess?.urgency ?? null,
+    chosenSymbol: last.chosenSymbol ?? null,
+    releaseUsd: last.releaseUsd ?? null,
+    repayUsd: last.repayUsd ?? null,
+    capitalBurned: last.capitalBurned ?? null,
+    verdict: last.verdict ?? null,
+    reason: last.reason ?? null,
+    reasons: last.reasons ?? lastAssess?.reasons ?? [],
+    mode: last.mode ?? null,
+    lastTickAt,
+  };
+}
 
 // Real mode needs a reachable RPC -- mainnet (READ_RPC_URL resolves to
 // MAINNET_RPC when READ_MODE=mainnet, see agent/src/config.ts) or a local
@@ -150,7 +213,23 @@ async function main() {
     if (url.pathname === '/api/decisions') {
       const records = readDecisions(LOG_PATH);
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ scenario: mode, records, live: records.length > 0 }));
+      // The log only ever grows -- serializing the whole thing on every
+      // request gets slower and heavier as the deployment stays up. The
+      // dashboard only ever renders the recent tail anyway.
+      res.end(JSON.stringify({ scenario: mode, records: records.slice(-200), live: records.length > 0 }));
+      return;
+    }
+
+    if (url.pathname === '/api/status') {
+      const authHeader = req.headers.authorization;
+      if (!AGENT_API_TOKEN || authHeader !== `Bearer ${AGENT_API_TOKEN}`) {
+        res.writeHead(401, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: 'unauthorized' }));
+        return;
+      }
+      const records = readDecisions(LOG_PATH);
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(deriveStatus(records)));
       return;
     }
 

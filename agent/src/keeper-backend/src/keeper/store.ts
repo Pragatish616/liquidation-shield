@@ -9,13 +9,21 @@ export interface DecisionRecord {
   kind: DecisionKind;
   hf?: number;
   targetHF?: number;
+  triggerHF?: number;
   pLiq?: number;
+  pLiq24h?: number;
+  urgency?: string;
   chosenSymbol?: string;
+  releaseUsd?: number;
+  repayUsd?: number;
   capitalBurned?: number;
   expectedLossNoAction?: number;
   expectedLossAction?: number;
+  verdict?: string;
   txHash?: string;
   reason?: string;
+  reasons?: string[];
+  mode?: string;
 }
 
 // Append one record to a JSON-lines file at path.
