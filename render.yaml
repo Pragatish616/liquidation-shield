@@ -3,8 +3,8 @@ services:
     name: liquidation-shield-backend
     runtime: node
     plan: free
-    buildCommand: corepack enable && pnpm install
-    startCommand: pnpm server
+    buildCommand: npx pnpm@11.24.0 install
+    startCommand: npx pnpm@11.24.0 server
     envVars:
       - key: TICK_INTERVAL_MS
         value: "15000"
