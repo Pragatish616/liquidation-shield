@@ -33,7 +33,7 @@ export async function fetchLiveDecisions(scenario: 'real' | 'save' | 'refuse'): 
     try {
       const res = await fetch(`${backendUrl.replace(/\/$/, '')}/api/decisions`, {
         cache: 'no-store',
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(20000),
       });
       if (res.ok) {
         const data = (await res.json()) as DecisionsPayload;
