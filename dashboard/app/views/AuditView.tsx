@@ -69,9 +69,9 @@ export function AuditView({ records }: { records: DecisionRecord[] }) {
                 {rec.txHash && (
                   <div className="mt-3 rounded-control border border-white/[0.06] bg-black/20 px-3 py-2">
                     <span className="text-[10px] font-medium uppercase tracking-[0.05em] text-paper-500">
-                      Tx hash
+                      Simulated tx hash
                     </span>
-                    <p className="tabular select-all break-all font-mono text-[11px] text-safe">{rec.txHash}</p>
+                    <p className="tabular select-all break-all font-mono text-[11px] text-paper-500">{rec.txHash}</p>
                   </div>
                 )}
 

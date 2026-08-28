@@ -26,7 +26,10 @@ export interface DecisionsPayload {
 // agent/src/keeper-backend/src/server.ts), proxy to it server-side so the
 // browser never needs CORS and the fetch stays same-origin from the client's
 // point of view. Falls back to reading the local JSON-lines log produced by
-// `pnpm demo:*`, which is how this route behaves for local/dev use.
+// `pnpm demo:*`, which is how this route behaves for local/dev use. The
+// timeout is generous because a free-tier Render backend that's been idle
+// takes 30-60s to cold-start; a short timeout here just means the first few
+// polls silently fall back to canned data instead of showing the real thing.
 export async function fetchLiveDecisions(scenario: 'real' | 'save' | 'refuse'): Promise<DecisionsPayload> {
   const backendUrl = process.env.BACKEND_URL;
   if (backendUrl) {

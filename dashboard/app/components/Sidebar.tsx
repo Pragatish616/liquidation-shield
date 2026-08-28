@@ -58,7 +58,7 @@ export function Sidebar({
           <span className={`relative inline-flex h-1.5 w-1.5 rounded-full ${live ? 'bg-safe' : 'bg-warn'}`} />
         </span>
         <span className="text-[11.5px] font-medium text-paper-500">
-          {live ? 'Live backend' : 'Demo data'}
+          {live ? 'Live simulation' : 'Demo data'}
         </span>
       </div>
     </aside>
