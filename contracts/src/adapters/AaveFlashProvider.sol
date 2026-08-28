@@ -3,12 +3,26 @@ pragma solidity ^0.8.24;
 
 import {IFlashProvider} from "../interfaces/IFlashProvider.sol";
 import {MockPool} from "../mocks/MockPool.sol";
+import "../libraries/Errors.sol";
 
 contract AaveFlashProvider is IFlashProvider {
     address public immutable POOL;
+    address private immutable DEPLOYER;
+    address public shield;
 
     constructor(address _pool) {
         POOL = _pool;
+        DEPLOYER = msg.sender;
+    }
+
+    // LiquidationShield's constructor needs this adapter's address (to set its
+    // own FLASH_PROVIDER immutable), so `shield` can't be set here without a
+    // circular deploy dependency. Settable exactly once, by the deployer only,
+    // gives the same effective guarantee as immutable once wiring is done.
+    function setShield(address _shield) external {
+        if (msg.sender != DEPLOYER) revert OnlyDeployer();
+        if (shield != address(0)) revert ShieldAlreadySet();
+        shield = _shield;
     }
 
     function flashLoanSimple(
@@ -18,6 +32,7 @@ contract AaveFlashProvider is IFlashProvider {
         bytes calldata params,
         uint16 referralCode
     ) external override {
+        if (msg.sender != shield) revert OnlyShield();
         // Call the mock pool's flashLoanSimple
         MockPool(POOL).flashLoanSimple(receiver, asset, amount, params, referralCode);
     }

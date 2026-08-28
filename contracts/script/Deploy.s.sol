@@ -60,6 +60,12 @@ contract Deploy is Script {
         );
         console.log("LiquidationShield:", address(shield));
 
+        // Wire the adapter to the shield it's allowed to serve. Settable
+        // once, by the deployer, since LiquidationShield's constructor needs
+        // flashProvider's address, so this can't be done the other way
+        // around inside AaveFlashProvider's own constructor.
+        flashProvider.setShield(address(shield));
+
         // Add shield as keeper
         registry.addKeeper(address(shield));
         // Add deployer as keeper for testing

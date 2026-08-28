@@ -22,3 +22,8 @@ error InvalidPermit();
 error UnauthorizedKeeper();
 error BelowTriggerHF();
 error ZeroAmount();
+error OnlyShield();
+error OnlyDeployer();
+error ShieldAlreadySet();
+error InvalidParamsCommitment();
+error ReentrantOperation();

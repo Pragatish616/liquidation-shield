@@ -23,6 +23,25 @@ contract LiquidationShield is ReentrancyGuard {
     IPolicyRegistry public immutable POLICY_REGISTRY;
     MockPool public immutable POOL;
 
+    // Transient commitment binding a flash loan callback to the exact params
+    // executeIntervention just initiated it with -- see executeOperation.
+    bytes32 private _pendingParamsHash;
+
+    // Independent reentrancy lock for executeOperation. It can't share
+    // ReentrancyGuard's nonReentrant with executeIntervention: the flash loan
+    // callback re-enters this contract from inside executeIntervention's own
+    // nonReentrant call, and OZ's guard is a single shared flag, so reusing
+    // it here would make every legitimate intervention revert with
+    // ReentrancyGuardReentrantCall the instant the callback fires.
+    bool private _operationEntered;
+
+    modifier nonReentrantOperation() {
+        if (_operationEntered) revert ReentrantOperation();
+        _operationEntered = true;
+        _;
+        _operationEntered = false;
+    }
+
     constructor(
         address flashProvider,
         address swapper,
@@ -60,13 +79,16 @@ contract LiquidationShield is ReentrancyGuard {
         (uint256 debtBefore,) = _snapshotUserState(params);
 
         // 6. Execute flash loan (calls back into executeOperation)
+        bytes memory flashParams = abi.encode(params, hfBefore);
+        _pendingParamsHash = keccak256(flashParams);
         FLASH_PROVIDER.flashLoanSimple(
             address(this),
             params.debtAsset,
             params.repayAmount,
-            abi.encode(params, hfBefore),
+            flashParams,
             0
         );
+        _pendingParamsHash = bytes32(0);
 
         // ============ POST-FLASH INVARIANTS ============
 
@@ -109,10 +131,19 @@ contract LiquidationShield is ReentrancyGuard {
         uint256 premium,
         address initiator,
         bytes calldata params
-    ) external returns (bool) {
+    ) external nonReentrantOperation returns (bool) {
         // Security: Only the Pool/FlashProvider can call this, and only from our own flash loan
         if (msg.sender != address(POOL) && msg.sender != address(FLASH_PROVIDER)) revert OnlyPool();
-        if (initiator != address(FLASH_PROVIDER) && initiator != address(this)) revert OnlyThis();
+        // The real gate: this callback must carry the exact params
+        // executeIntervention committed to right before initiating the flash
+        // loan. `initiator` alone is not sufficient -- it is always
+        // address(FLASH_PROVIDER) for any flash loan routed through the
+        // adapter, legitimate or not, since FLASH_PROVIDER is the account
+        // that actually calls POOL.flashLoanSimple.
+        if (_pendingParamsHash == bytes32(0) || keccak256(params) != _pendingParamsHash) {
+            revert InvalidParamsCommitment();
+        }
+        if (initiator != address(FLASH_PROVIDER)) revert OnlyThis();
 
         // Decode parameters
         (IIntervention.InterventionParams memory p,) = abi.decode(params, (IIntervention.InterventionParams, uint256));
