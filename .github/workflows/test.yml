@@ -18,6 +18,15 @@ jobs:
       # fork test (test/LiquidationShieldFork.t.sol) needs a real mainnet
       # RPC to fork from. Set as a repo/org secret.
       MAINNET_RPC: ${{ secrets.MAINNET_RPC }}
+    defaults:
+      run:
+        # This workflow used to live at contracts/.github/workflows/test.yml,
+        # a path GitHub Actions never actually scans (only the repo root's
+        # .github/workflows/ is discovered) -- it had 0 runs, ever. Moved
+        # here to the real location; actions/checkout still puts the repo at
+        # its root regardless of where this file lives, and foundry.toml is
+        # in contracts/, so every run: step below needs this.
+        working-directory: contracts
     steps:
       - uses: actions/checkout@v6
         with:
@@ -36,10 +45,11 @@ jobs:
       - name: Run Forge build
         run: forge build --sizes
 
-      # `forge test` exits 0 on an empty suite -- that's how this repo ran
-      # a "passing" CI badge over zero test coverage for as long as
-      # contracts/test/ was empty. Fail explicitly before trusting the
-      # test step's own exit code.
+      # `forge test` exits 0 on an empty suite. Now that this workflow is
+      # actually discoverable (see the working-directory note above),
+      # nothing stops that from silently passing again if test/ ever goes
+      # back to empty -- fail explicitly before trusting the test step's
+      # own exit code.
       - name: Guard against an empty test suite
         run: |
           COUNT=$(forge test --list --json 2>/dev/null | jq '[.[] | to_entries[]? | .value[]?] | length')
