@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { MobileNav } from './components/MobileNav';
 import { TopBar } from './components/TopBar';
+import { VoiceAgent } from './components/VoiceAgent';
 import { OverviewView } from './views/OverviewView';
 import { PlanView } from './views/PlanView';
 import { AuditView } from './views/AuditView';
@@ -122,6 +123,7 @@ export default function DashboardPage() {
           {view === 'audit' && <AuditView records={records} />}
         </main>
       </div>
+      <VoiceAgent records={records} onSwitchView={setView} />
     </div>
   );
 }
